@@ -10,8 +10,9 @@
     "build:frontend": "npm --prefix frontend run build",
     "migrate": "npm --prefix backend run migrate",
     "seed": "npm --prefix backend run seed",
-    "test": "npm --prefix backend test",
+    "test": "npm --prefix backend test && npm --prefix frontend test",
     "test:unit": "npm --prefix backend run test:unit",
+    "test:frontend": "npm --prefix frontend test",
     "test:random": "npm --prefix backend run test:random",
     "test:api": "npm --prefix backend run test:api"
   }
