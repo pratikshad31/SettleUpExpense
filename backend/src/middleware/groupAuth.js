@@ -8,7 +8,12 @@ const { query } = require('../db');
  */
 async function requireGroupMember(req, res, next) {
   try {
-    const groupId = parseInt(req.params.groupId || req.params.id, 10);
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const rawId = req.params ? (req.params.groupId || req.params.id) : null;
+    const groupId = parseInt(rawId, 10);
     if (!groupId || isNaN(groupId)) {
       return res.status(400).json({ error: 'Valid Group ID is required in URL parameter' });
     }
