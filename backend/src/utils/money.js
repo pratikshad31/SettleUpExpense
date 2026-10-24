@@ -4,6 +4,7 @@
 /**
  * Convert INR (number or string, e.g. 150.50) to integer Paise (15050)
  * Uses precise rounding to prevent binary floating point artifacts.
+ * Rejects values with more than 2 decimal places or invalid types.
  * @param {number|string} amount
  * @returns {number}
  */
@@ -11,14 +12,40 @@ function toPaise(amount) {
   if (amount === null || amount === undefined || amount === '') {
     throw new Error('Amount cannot be null or empty');
   }
-  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-  if (isNaN(num)) {
+  if (typeof amount !== 'number' && typeof amount !== 'string') {
     throw new Error(`Invalid amount: ${amount}`);
   }
-  if (!isFinite(num)) {
-    throw new Error('Amount must be finite');
+
+  let num;
+  if (typeof amount === 'string') {
+    const trimmed = amount.trim();
+    if (!/^-?\d+(\.\d+)?$/.test(trimmed)) {
+      throw new Error(`Invalid amount: ${amount}`);
+    }
+    if (trimmed.includes('.')) {
+      const decimals = trimmed.split('.')[1];
+      if (decimals.length > 2) {
+        throw new Error('Amount must have at most 2 decimal places');
+      }
+    }
+    num = Number(trimmed);
+  } else {
+    num = amount;
+    if (isNaN(num)) {
+      throw new Error(`Invalid amount: ${amount}`);
+    }
+    if (!isFinite(num)) {
+      throw new Error('Amount must be finite');
+    }
+    const numStr = num.toString();
+    if (numStr.includes('.')) {
+      const decimals = numStr.split('.')[1];
+      if (decimals.length > 2) {
+        throw new Error('Amount must have at most 2 decimal places');
+      }
+    }
   }
-  // Max 2 decimal places allowed
+
   const roundedPaise = Math.round(num * 100);
   return roundedPaise;
 }
@@ -29,8 +56,25 @@ function toPaise(amount) {
  * @returns {number}
  */
 function toINR(paise) {
-  const p = typeof paise === 'bigint' ? Number(paise) : parseInt(paise, 10);
-  if (isNaN(p)) {
+  if (
+    paise === null ||
+    paise === undefined ||
+    typeof paise === 'boolean' ||
+    Array.isArray(paise) ||
+    (typeof paise === 'object' && typeof paise !== 'bigint')
+  ) {
+    throw new Error(`Invalid paise: ${paise}`);
+  }
+
+  if (typeof paise === 'string') {
+    const trimmed = paise.trim();
+    if (!/^-?\d+$/.test(trimmed)) {
+      throw new Error(`Invalid paise: ${paise}`);
+    }
+  }
+
+  const p = typeof paise === 'bigint' ? Number(paise) : Number(paise);
+  if (isNaN(p) || !Number.isInteger(p)) {
     throw new Error(`Invalid paise: ${paise}`);
   }
   return p / 100;
@@ -58,6 +102,27 @@ function formatINR(paise) {
  * @returns {boolean}
  */
 function isPositivePaise(val) {
+  if (
+    val === null ||
+    val === undefined ||
+    typeof val === 'boolean' ||
+    Array.isArray(val) ||
+    (typeof val === 'object' && typeof val !== 'bigint')
+  ) {
+    return false;
+  }
+
+  if (typeof val === 'bigint') {
+    return val > 0n;
+  }
+
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      return false;
+    }
+  }
+
   const n = Number(val);
   return Number.isInteger(n) && n > 0;
 }
