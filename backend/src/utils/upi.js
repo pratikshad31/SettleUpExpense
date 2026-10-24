@@ -28,8 +28,15 @@ function generateUpiUri({ upiId, recipientName, amountPaise, note = 'SettleUp se
     return '';
   }
   const cleanUpi = upiId.trim();
+  if (!isValidUpiId(cleanUpi)) {
+    throw new Error(`Invalid recipient UPI ID: ${upiId}`);
+  }
+  if (!amountPaise || isNaN(amountPaise) || Number(amountPaise) <= 0) {
+    throw new Error('Valid positive amount in paise is required for UPI link');
+  }
+
   const cleanName = (recipientName || 'Group Member').trim();
-  const amountInr = (amountPaise / 100).toFixed(2);
+  const amountInr = (Number(amountPaise) / 100).toFixed(2);
   const cleanNote = (note || 'Expense Settlement').substring(0, 50).trim();
 
   const params = new URLSearchParams({
@@ -40,7 +47,7 @@ function generateUpiUri({ upiId, recipientName, amountPaise, note = 'SettleUp se
     tn: cleanNote,
   });
 
-  return `upi://pay?${params.toString()}`;
+  return `upi://pay?${params.toString().replace(/\+/g, '%20')}`;
 }
 
 module.exports = {
