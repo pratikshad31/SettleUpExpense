@@ -17,6 +17,9 @@ async function authenticate(req, res, next) {
     let decoded;
     try {
       decoded = jwt.verify(token, secret);
+      if (!decoded || !decoded.userId) {
+        return res.status(401).json({ error: 'Invalid token payload.' });
+      }
     } catch (err) {
       return res.status(401).json({ error: 'Invalid or expired authentication token.' });
     }
