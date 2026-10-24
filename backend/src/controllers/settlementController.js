@@ -369,14 +369,19 @@ async function getGroupSettlements(req, res, next) {
 
     // Enrich with safe UPI links
     const enriched = result.rows.map((row) => {
-      const upiUri = row.to_user_upi
-        ? generateUpiUri({
+      let upiUri = null;
+      if (row.to_user_upi && row.amount_paise > 0) {
+        try {
+          upiUri = generateUpiUri({
             upiId: row.to_user_upi,
             recipientName: row.to_user_name,
             amountPaise: row.amount_paise,
             note: `SettleUp payment to ${row.to_user_name}`,
-          })
-        : null;
+          });
+        } catch (_) {
+          upiUri = null;
+        }
+      }
 
       return {
         ...row,

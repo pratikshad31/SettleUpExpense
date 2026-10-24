@@ -62,14 +62,19 @@ async function getGroupBalances(req, res, next) {
 
     // Enrich suggestions with UPI URIs
     const enrichedSuggestions = suggestions.map((sug) => {
-      const upiUri = sug.toUpiId
-        ? generateUpiUri({
+      let upiUri = null;
+      if (sug.toUpiId && sug.amountPaise > 0) {
+        try {
+          upiUri = generateUpiUri({
             upiId: sug.toUpiId,
             recipientName: sug.toName,
             amountPaise: sug.amountPaise,
             note: `SettleUp debt payment to ${sug.toName}`,
-          })
-        : null;
+          });
+        } catch (_) {
+          upiUri = null;
+        }
+      }
 
       return {
         ...sug,
