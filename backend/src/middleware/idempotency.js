@@ -30,7 +30,10 @@ function idempotency(ttlHours = 24) {
       if (existing.rowCount > 0) {
         const record = existing.rows[0];
         res.setHeader('X-Cache-Lookup', 'HIT');
-        return res.status(record.response_code).json(record.response_body);
+        const parsedBody = typeof record.response_body === 'string' 
+          ? JSON.parse(record.response_body) 
+          : record.response_body;
+        return res.status(record.response_code).json(parsedBody);
       }
 
       // Monkey-patch res.json to capture output and save record
@@ -41,7 +44,7 @@ function idempotency(ttlHours = 24) {
           query(
             `INSERT INTO idempotency_records 
              (idempotency_key, user_id, route, response_code, response_body, expires_at)
-             VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP + ($6 || ' hours')::INTERVAL)
+             VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP + ($6 * INTERVAL '1 hour'))
              ON CONFLICT (idempotency_key) DO UPDATE 
              SET response_code = EXCLUDED.response_code, 
                  response_body = EXCLUDED.response_body, 
