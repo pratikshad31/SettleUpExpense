@@ -8,7 +8,7 @@
     "migrate": "node src/database/migrate.js",
     "seed": "node src/database/seed.js",
     "test": "node --test tests/**/*.test.js",
-    "test:unit": "node --test tests/splits.test.js tests/optimizer.test.js tests/debts.test.js",
+    "test:unit": "node --test tests/money.test.js tests/splits.test.js tests/upi.test.js tests/debts.test.js tests/optimizer.test.js",
     "test:random": "node --test tests/randomizedFinancial.test.js",
     "test:api": "node --test tests/api.test.js"
   },
