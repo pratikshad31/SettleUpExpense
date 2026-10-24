@@ -84,6 +84,8 @@ export default function SignupPage() {
               <label className="form-label">Full Name *</label>
               <input
                 type="text"
+                name="name"
+                autoComplete="name"
                 className="form-input"
                 placeholder="e.g. Aarav Sharma"
                 value={name}
@@ -96,6 +98,8 @@ export default function SignupPage() {
               <label className="form-label">Email Address *</label>
               <input
                 type="email"
+                name="email"
+                autoComplete="email"
                 className="form-input"
                 placeholder="name@example.com"
                 value={email}
@@ -108,6 +112,8 @@ export default function SignupPage() {
               <label className="form-label">Password * (min 6 characters)</label>
               <input
                 type="password"
+                name="password"
+                autoComplete="new-password"
                 className="form-input"
                 placeholder="••••••••"
                 value={password}
@@ -120,6 +126,7 @@ export default function SignupPage() {
               <label className="form-label">UPI ID (Optional)</label>
               <input
                 type="text"
+                name="upi_id"
                 className="form-input"
                 placeholder="username@okhdfcbank or 9876543210@paytm"
                 value={upiId}

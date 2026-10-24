@@ -22,9 +22,18 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
+    const formData = new FormData(e.currentTarget);
+    const targetEmail = (formData.get('email') || email || '').trim();
+    const targetPassword = formData.get('password') || password || '';
+
+    if (!targetEmail || !targetPassword) {
+      setError('Email and password are required');
+      return;
+    }
+
     try {
       setLoading(true);
-      await login(email, password);
+      await login(targetEmail, targetPassword);
       navigate(from, { replace: true });
     } catch (err) {
       setError(err.message || 'Invalid email or password');
@@ -91,6 +100,9 @@ export default function LoginPage() {
               <div style={{ position: 'relative' }}>
                 <input
                   type="email"
+                  name="email"
+                  id="email"
+                  autoComplete="email"
                   className="form-input"
                   placeholder="name@example.com"
                   value={email}
@@ -104,6 +116,9 @@ export default function LoginPage() {
               <label className="form-label">Password</label>
               <input
                 type="password"
+                name="password"
+                id="password"
+                autoComplete="current-password"
                 className="form-input"
                 placeholder="••••••••"
                 value={password}
