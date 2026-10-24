@@ -2,7 +2,11 @@
 // Centralized error handling middleware
 
 function errorHandler(err, req, res, next) {
-  const statusCode = err.status || err.statusCode || 500;
+  const errorObj = typeof err === 'object' && err !== null ? err : { message: String(err) };
+  let statusCode = errorObj.status || errorObj.statusCode || 500;
+  if (typeof statusCode !== 'number' || statusCode < 100 || statusCode > 599) {
+    statusCode = 500;
+  }
   const isDev = process.env.NODE_ENV === 'development';
 
   if (statusCode === 500) {
@@ -10,11 +14,11 @@ function errorHandler(err, req, res, next) {
   }
 
   // Safe message formatting
-  const message = err.message || 'Internal Server Error';
+  const message = errorObj.message || 'Internal Server Error';
 
   res.status(statusCode).json({
     error: message,
-    ...(isDev && { stack: err.stack }),
+    ...(isDev && errorObj.stack && { stack: errorObj.stack }),
   });
 }
 
