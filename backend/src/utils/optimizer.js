@@ -24,9 +24,13 @@
  * @param {Array<{ id: number, name: string, upi_id?: string }>} groupMembers
  * @returns {{ balances: Array<{ userId: number, name: string, upiId: string|null, totalPaidPaise: number, totalOwedPaise: number, netBalancePaise: number }>, suggestions: Array<{ fromUser: number, fromName: string, toUser: number, toName: string, toUpiId: string|null, amountPaise: number }> }}
  */
-function calculateBalancesAndOptimization(expenses, settlements, groupMembers = []) {
+function calculateBalancesAndOptimization(expenses = [], settlements = [], groupMembers = []) {
+  const safeExpenses = expenses || [];
+  const safeSettlements = settlements || [];
+  const safeMembers = groupMembers || [];
+
   const memberMap = new Map();
-  for (const m of groupMembers) {
+  for (const m of safeMembers) {
     memberMap.set(Number(m.id), {
       name: m.name,
       upiId: m.upi_id || null,
@@ -40,7 +44,7 @@ function calculateBalancesAndOptimization(expenses, settlements, groupMembers = 
   const settlementReceived = {};
 
   // Initialize all known group members
-  for (const m of groupMembers) {
+  for (const m of safeMembers) {
     const id = Number(m.id);
     totalPaid[id] = 0;
     totalOwed[id] = 0;
@@ -49,7 +53,7 @@ function calculateBalancesAndOptimization(expenses, settlements, groupMembers = 
   }
 
   // 1. Process Active (non-voided) Expenses
-  for (const exp of expenses) {
+  for (const exp of safeExpenses) {
     if (exp.is_voided) continue;
 
     for (const p of exp.payers || []) {
@@ -64,7 +68,7 @@ function calculateBalancesAndOptimization(expenses, settlements, groupMembers = 
   }
 
   // 2. Process Confirmed Settlements ONLY
-  for (const st of settlements) {
+  for (const st of safeSettlements) {
     if (st.status !== 'confirmed') continue;
 
     const from = Number(st.from_user);
@@ -77,7 +81,7 @@ function calculateBalancesAndOptimization(expenses, settlements, groupMembers = 
 
   // Collect all unique user IDs involved
   const allUserIds = new Set([
-    ...groupMembers.map((m) => Number(m.id)),
+    ...safeMembers.map((m) => Number(m.id)),
     ...Object.keys(totalPaid).map(Number),
     ...Object.keys(totalOwed).map(Number),
     ...Object.keys(settlementPaid).map(Number),

@@ -151,4 +151,11 @@ describe('Settlement Optimizer & Net Balance Tests', () => {
     // Number of suggestions should be strictly <= N - 1 (<= 4)
     assert.ok(suggestions.length <= members.length - 1);
   });
+
+  it('should safely handle empty or null inputs', () => {
+    const res = calculateBalancesAndOptimization(null, null, null);
+    assert.deepStrictEqual(res.balances, []);
+    assert.deepStrictEqual(res.suggestions, []);
+    assert.strictEqual(res.netSumPaise, 0);
+  });
 });
