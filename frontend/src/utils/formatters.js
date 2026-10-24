@@ -24,6 +24,7 @@ export function formatINR(paise) {
 export function formatDate(dateString) {
   if (!dateString) return '';
   const d = new Date(dateString);
+  if (isNaN(d.getTime())) return '';
   return d.toLocaleDateString('en-IN', {
     day: 'numeric',
     month: 'short',
@@ -37,6 +38,7 @@ export function formatDate(dateString) {
 export function formatDateTime(isoString) {
   if (!isoString) return '';
   const d = new Date(isoString);
+  if (isNaN(d.getTime())) return '';
   return d.toLocaleString('en-IN', {
     day: 'numeric',
     month: 'short',
