@@ -1,5 +1,5 @@
 // backend/tests/splits.test.js
-// Unit tests for all 6 split methods and deterministic remainder distribution
+// Dedicated unit tests for splits.js (All 6 Split Methods + Invariant checks)
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert');
@@ -13,160 +13,232 @@ const {
   calculateSplit,
 } = require('../src/utils/splits');
 
-describe('Financial Split Engine Tests', () => {
-  describe('1. Equal Split', () => {
+describe('Module 2: Split Methods Utilities (src/utils/splits.js)', () => {
+  describe('1. calculateEqualSplit(totalPaise, participantIds)', () => {
     it('should split evenly when total is cleanly divisible', () => {
-      const res = calculateEqualSplit(30000, [1, 2, 3]); // ₹300 / 3
+      const res = calculateEqualSplit(3000, [1, 2, 3]);
       assert.strictEqual(res.length, 3);
-      assert.deepStrictEqual(res.map(r => r.sharePaise), [10000, 10000, 10000]);
-      assert.strictEqual(res.reduce((s, r) => s + r.sharePaise, 0), 30000);
+      assert.deepStrictEqual(res.map((r) => r.sharePaise), [1000, 1000, 1000]);
+      assert.strictEqual(res.reduce((s, r) => s + r.sharePaise, 0), 3000);
     });
 
-    it('should distribute remainder deterministically to earliest user IDs', () => {
-      const res = calculateEqualSplit(10000, [3, 1, 2]); // ₹100 / 3 = 3333 paise each + 1 remainder
-      // Sorted IDs are [1, 2, 3], remainder 1 should go to user #1
-      assert.strictEqual(res.length, 3);
-      assert.strictEqual(res.find(r => r.userId === 1).sharePaise, 3334);
-      assert.strictEqual(res.find(r => r.userId === 2).sharePaise, 3333);
-      assert.strictEqual(res.find(r => r.userId === 3).sharePaise, 3333);
-      assert.strictEqual(res.reduce((s, r) => s + r.sharePaise, 0), 10000);
+    it('should deterministically distribute remainder paise to lowest user IDs first', () => {
+      // 100 paise among 3 users -> 34, 33, 33 (remainder is 1)
+      const res = calculateEqualSplit(100, [3, 1, 2]);
+      assert.strictEqual(res[0].userId, 1);
+      assert.strictEqual(res[0].sharePaise, 34);
+      assert.strictEqual(res[1].userId, 2);
+      assert.strictEqual(res[1].sharePaise, 33);
+      assert.strictEqual(res[2].userId, 3);
+      assert.strictEqual(res[2].sharePaise, 33);
+      assert.strictEqual(res.reduce((s, r) => s + r.sharePaise, 0), 100);
     });
 
-    it('should throw if participant list is empty or total <= 0', () => {
-      assert.throws(() => calculateEqualSplit(1000, []), /At least one participant/);
-      assert.throws(() => calculateEqualSplit(0, [1, 2]), /greater than 0/);
+    it('should handle single participant', () => {
+      const res = calculateEqualSplit(5555, [10]);
+      assert.strictEqual(res.length, 1);
+      assert.strictEqual(res[0].userId, 10);
+      assert.strictEqual(res[0].sharePaise, 5555);
+    });
+
+    it('should deduplicate participant IDs', () => {
+      const res = calculateEqualSplit(200, [1, 1, 2]);
+      assert.strictEqual(res.length, 2);
+      assert.strictEqual(res[0].sharePaise, 100);
+      assert.strictEqual(res[1].sharePaise, 100);
+    });
+
+    it('should reject invalid participants or non-positive totalPaise', () => {
+      assert.throws(() => calculateEqualSplit(0, [1, 2]), /Total amount must be greater than 0/i);
+      assert.throws(() => calculateEqualSplit(-100, [1, 2]), /Total amount must be greater than 0/i);
+      assert.throws(() => calculateEqualSplit(100, []), /At least one participant is required/i);
+      assert.throws(() => calculateEqualSplit(100, null), /At least one participant is required/i);
     });
   });
 
-  describe('2. Exact Amounts Split', () => {
-    it('should accept valid exact amounts that sum to total', () => {
-      const parts = [
+  describe('2. calculateExactSplit(totalPaise, participants)', () => {
+    it('should accept valid exact amounts that sum to totalPaise', () => {
+      const participants = [
         { userId: 1, amountPaise: 4000 },
         { userId: 2, amountPaise: 6000 },
       ];
-      const res = calculateExactSplit(10000, parts);
+      const res = calculateExactSplit(10000, participants);
       assert.strictEqual(res.length, 2);
+      assert.strictEqual(res[0].sharePaise, 4000);
+      assert.strictEqual(res[1].sharePaise, 6000);
       assert.strictEqual(res.reduce((s, r) => s + r.sharePaise, 0), 10000);
     });
 
-    it('should reject exact amounts that do not equal total', () => {
-      const parts = [
+    it('should reject if exact amounts sum does not match totalPaise', () => {
+      const participants = [
         { userId: 1, amountPaise: 4000 },
-        { userId: 2, amountPaise: 5000 }, // sum 9000 != 10000
+        { userId: 2, amountPaise: 5000 },
       ];
-      assert.throws(() => calculateExactSplit(10000, parts), /does not match total/);
+      assert.throws(() => calculateExactSplit(10000, participants), /does not match total amount/i);
     });
 
-    it('should reject negative exact share', () => {
-      const parts = [
-        { userId: 1, amountPaise: -100 },
-        { userId: 2, amountPaise: 10100 },
+    it('should reject negative exact share amounts', () => {
+      const participants = [
+        { userId: 1, amountPaise: 12000 },
+        { userId: 2, amountPaise: -2000 },
       ];
-      assert.throws(() => calculateExactSplit(10000, parts), /negative exact share/);
+      assert.throws(() => calculateExactSplit(10000, participants), /cannot have a negative exact share/i);
+    });
+
+    it('should reject duplicate participants', () => {
+      const participants = [
+        { userId: 1, amountPaise: 5000 },
+        { userId: 1, amountPaise: 5000 },
+      ];
+      assert.throws(() => calculateExactSplit(10000, participants), /Duplicate participant detected/i);
     });
   });
 
-  describe('3. Percentage Split', () => {
-    it('should split according to percentages and handle rounding remainders', () => {
-      // ₹100 split 33.33%, 33.33%, 33.34%
-      const parts = [
+  describe('3. calculatePercentageSplit(totalPaise, participants)', () => {
+    it('should split by percentages accurately', () => {
+      const participants = [
+        { userId: 1, percentage: 50 },
+        { userId: 2, percentage: 30 },
+        { userId: 3, percentage: 20 },
+      ];
+      const res = calculatePercentageSplit(10000, participants);
+      assert.strictEqual(res[0].sharePaise, 5000);
+      assert.strictEqual(res[1].sharePaise, 3000);
+      assert.strictEqual(res[2].sharePaise, 2000);
+      assert.strictEqual(res.reduce((s, r) => s + r.sharePaise, 0), 10000);
+    });
+
+    it('should deterministically award fractional remainder paise', () => {
+      // 100 paise split 33.33%, 33.33%, 33.34%
+      const participants = [
         { userId: 1, percentage: 33.33 },
         { userId: 2, percentage: 33.33 },
         { userId: 3, percentage: 33.34 },
       ];
-      const res = calculatePercentageSplit(10000, parts);
-      assert.strictEqual(res.reduce((s, r) => s + r.sharePaise, 0), 10000);
+      const res = calculatePercentageSplit(100, participants);
+      assert.strictEqual(res.reduce((s, r) => s + r.sharePaise, 0), 100);
+      const user3 = res.find((r) => r.userId === 3);
+      assert.strictEqual(user3.sharePaise, 34);
     });
 
-    it('should reject percentages that do not sum to 100', () => {
-      const parts = [
+    it('should reject when percentages sum != 100', () => {
+      const participants = [
         { userId: 1, percentage: 50 },
         { userId: 2, percentage: 40 },
       ];
-      assert.throws(() => calculatePercentageSplit(10000, parts), /must sum to 100%/);
+      assert.throws(() => calculatePercentageSplit(10000, participants), /Percentages must sum to 100%/i);
+    });
+
+    it('should reject negative percentages', () => {
+      const participants = [
+        { userId: 1, percentage: 120 },
+        { userId: 2, percentage: -20 },
+      ];
+      assert.throws(() => calculatePercentageSplit(10000, participants), /Percentage cannot be negative/i);
     });
   });
 
-  describe('4. Shares / Weights Split', () => {
-    it('should divide proportionally by shares with remainder distribution', () => {
-      const parts = [
+  describe('4. calculateSharesSplit(totalPaise, participants)', () => {
+    it('should allocate shares based on proportional weights', () => {
+      const participants = [
         { userId: 1, shares: 2 },
         { userId: 2, shares: 1 },
       ];
-      const res = calculateSharesSplit(10000, parts); // 2:1 ratio of ₹100 = 6667 and 3333
-      assert.strictEqual(res.find(r => r.userId === 1).sharePaise, 6667);
-      assert.strictEqual(res.find(r => r.userId === 2).sharePaise, 3333);
-      assert.strictEqual(res.reduce((s, r) => s + r.sharePaise, 0), 10000);
+      const res = calculateSharesSplit(3000, participants);
+      assert.strictEqual(res[0].sharePaise, 2000);
+      assert.strictEqual(res[1].sharePaise, 1000);
+      assert.strictEqual(res.reduce((s, r) => s + r.sharePaise, 0), 3000);
     });
 
-    it('should reject zero or negative shares', () => {
-      const parts = [
-        { userId: 1, shares: 0 },
+    it('should handle fractional remainders fairly and deterministically', () => {
+      const participants = [
+        { userId: 1, shares: 1 },
         { userId: 2, shares: 1 },
+        { userId: 3, shares: 1 },
       ];
-      assert.throws(() => calculateSharesSplit(10000, parts), /greater than 0/);
+      const res = calculateSharesSplit(100, participants);
+      assert.strictEqual(res.reduce((s, r) => s + r.sharePaise, 0), 100);
+      assert.strictEqual(res[0].sharePaise, 34);
+      assert.strictEqual(res[1].sharePaise, 33);
+      assert.strictEqual(res[2].sharePaise, 33);
+    });
+
+    it('should reject shares <= 0', () => {
+      const participants = [
+        { userId: 1, shares: 2 },
+        { userId: 2, shares: 0 },
+      ];
+      assert.throws(() => calculateSharesSplit(1000, participants), /Shares must be greater than 0/i);
     });
   });
 
-  describe('5. Adjustment Split', () => {
-    it('should split equally and apply positive/negative adjustments', () => {
-      // Total ₹100 (10000 paise), 2 users.
-      // User 1 has +₹20 (2000 paise) adjustment, User 2 has 0 adjustment.
-      // Net distributable = 10000 - 2000 = 8000. Base = 4000 each.
-      // Final: User 1 = 4000 + 2000 = 6000. User 2 = 4000. Sum = 10000.
-      const parts = [
+  describe('5. calculateAdjustmentSplit(totalPaise, participants)', () => {
+    it('should split equally and apply positive and negative adjustments', () => {
+      const participants = [
+        { userId: 1, adjustmentPaise: 500 },
+        { userId: 2, adjustmentPaise: -500 },
+        { userId: 3, adjustmentPaise: 0 },
+      ];
+      const res = calculateAdjustmentSplit(3000, participants);
+      assert.strictEqual(res[0].sharePaise, 1500);
+      assert.strictEqual(res[1].sharePaise, 500);
+      assert.strictEqual(res[2].sharePaise, 1000);
+      assert.strictEqual(res.reduce((s, r) => s + r.sharePaise, 0), 3000);
+    });
+
+    it('should reject if adjustments sum exceeds total expense amount', () => {
+      const participants = [
         { userId: 1, adjustmentPaise: 2000 },
-        { userId: 2, adjustmentPaise: 0 },
+        { userId: 2, adjustmentPaise: 2000 },
       ];
-      const res = calculateAdjustmentSplit(10000, parts);
-      assert.strictEqual(res.find(r => r.userId === 1).sharePaise, 6000);
-      assert.strictEqual(res.find(r => r.userId === 2).sharePaise, 4000);
-      assert.strictEqual(res.reduce((s, r) => s + r.sharePaise, 0), 10000);
+      assert.throws(() => calculateAdjustmentSplit(3000, participants), /Total adjustments .* exceed total expense/i);
     });
 
-    it('should reject if adjustments exceed total expense', () => {
-      const parts = [
-        { userId: 1, adjustmentPaise: 12000 },
-        { userId: 2, adjustmentPaise: 0 },
+    it('should reject if adjustment results in negative final share', () => {
+      const participants = [
+        { userId: 1, adjustmentPaise: 500 },
+        { userId: 2, adjustmentPaise: -1500 },
       ];
-      assert.throws(() => calculateAdjustmentSplit(10000, parts), /Total adjustments.*exceed total/);
+      assert.throws(() => calculateAdjustmentSplit(1000, participants), /results in a negative final share/i);
     });
   });
 
-  describe('6. Itemized Split', () => {
-    it('should allocate individual items and distribute shared tax proportionally', () => {
+  describe('6. calculateItemizedSplit(totalPaise, items, sharedTaxPaise, allParticipantIds)', () => {
+    it('should calculate individual item subtotals plus proportional tax/fees', () => {
       const items = [
-        { name: 'Burger', amountPaise: 3000, assignedUserIds: [1] },
-        { name: 'Pizza', amountPaise: 5000, assignedUserIds: [2] },
+        { name: 'Pizza', amountPaise: 8000, assignedUserIds: [1, 2] },
+        { name: 'Drinks', amountPaise: 2000, assignedUserIds: [2] },
       ];
-      // Total ₹100 (10000 paise). Item subtotal = 8000 paise. Shared tax = 2000 paise.
-      // Proportional tax: User 1 has 3/8 of 2000 = 750 paise. User 2 has 5/8 of 2000 = 1250 paise.
-      // Final: User 1 = 3750, User 2 = 6250. Sum = 10000.
-      const res = calculateItemizedSplit(10000, items, 2000, [1, 2]);
-      assert.strictEqual(res.find(r => r.userId === 1).sharePaise, 3750);
-      assert.strictEqual(res.find(r => r.userId === 2).sharePaise, 6250);
-      assert.strictEqual(res.reduce((s, r) => s + r.sharePaise, 0), 10000);
+      const res = calculateItemizedSplit(11000, items, 1000, [1, 2]);
+      assert.strictEqual(res.length, 2);
+      assert.strictEqual(res[0].userId, 1);
+      assert.strictEqual(res[0].sharePaise, 4400);
+      assert.strictEqual(res[1].userId, 2);
+      assert.strictEqual(res[1].sharePaise, 6600);
+      assert.strictEqual(res.reduce((s, r) => s + r.sharePaise, 0), 11000);
     });
 
-    it('should reject if items total exceeds overall expense amount', () => {
+    it('should reject if items sum exceeds total expense', () => {
       const items = [
-        { name: 'Item 1', amountPaise: 8000, assignedUserIds: [1] },
-        { name: 'Item 2', amountPaise: 4000, assignedUserIds: [2] },
+        { name: 'Expensive Item', amountPaise: 5000, assignedUserIds: [1] },
       ];
-      assert.throws(() => calculateItemizedSplit(10000, items), /Sum of items.*exceeds total/);
+      assert.throws(() => calculateItemizedSplit(4000, items), /Sum of items .* exceeds total expense/i);
     });
   });
 
-  describe('Master Split Dispatcher', () => {
-    it('should correctly route each split type', () => {
-      const eq = calculateSplit('equal', 5000, [1, 2]);
-      assert.strictEqual(eq.reduce((s, r) => s + r.sharePaise, 0), 5000);
+  describe('7. calculateSplit dispatcher', () => {
+    it('should route to correct split handler', () => {
+      const eq = calculateSplit('equal', 2000, [1, 2]);
+      assert.strictEqual(eq.length, 2);
+      assert.strictEqual(eq[0].sharePaise, 1000);
 
-      const exact = calculateSplit('exact', 5000, [
-        { userId: 1, amountPaise: 2500 },
-        { userId: 2, amountPaise: 2500 },
+      const ex = calculateSplit('exact', 2000, [
+        { userId: 1, amountPaise: 1500 },
+        { userId: 2, amountPaise: 500 },
       ]);
-      assert.strictEqual(exact.reduce((s, r) => s + r.sharePaise, 0), 5000);
+      assert.strictEqual(ex[0].sharePaise, 1500);
+
+      assert.throws(() => calculateSplit('nonexistent', 1000, []), /Unknown split type/i);
     });
   });
 });
