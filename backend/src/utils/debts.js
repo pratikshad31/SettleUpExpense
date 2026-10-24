@@ -24,7 +24,7 @@
  * @param {Map<number, string>|Object} userMap - Map of userId -> userName
  * @returns {Array<{ fromUser: number, fromName: string, toUser: number, toName: string, amountPaise: number }>}
  */
-function calculateDetailedDebts(expenses, settlements, userMap = {}) {
+function calculateDetailedDebts(expenses = [], settlements = [], userMap = {}) {
   // Pairwise map: debts[fromUser][toUser] = amountPaise
   const debts = {};
 
@@ -35,7 +35,7 @@ function calculateDetailedDebts(expenses, settlements, userMap = {}) {
   }
 
   // 1. Process Expenses
-  for (const exp of expenses) {
+  for (const exp of (expenses || [])) {
     const total = Number(exp.total_amount_paise);
     if (!total || total <= 0) continue;
 
@@ -84,7 +84,7 @@ function calculateDetailedDebts(expenses, settlements, userMap = {}) {
   }
 
   // 2. Subtract Confirmed Settlements
-  for (const st of settlements) {
+  for (const st of (settlements || [])) {
     if (st.status !== 'confirmed') continue;
     const from = Number(st.from_user);
     const to = Number(st.to_user);
