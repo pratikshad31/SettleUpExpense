@@ -20,7 +20,7 @@ The application calculates and displays exactly **who owes whom**, maintains a m
 - Server strictly recalculates and validates all amounts; client totals are never trusted.
 - Zero-sum invariant: $\sum \text{Net Balance} \equiv 0$ is guaranteed at all times.
 
-### 2. Six Complete Split Methods with Fair Remainder Distribution
+### 2. Four Complete Split Methods with Fair Remainder Distribution
 1. **Equal Split**: Even division among selected members with deterministic 1-paisa remainder allocation.
 2. **Exact Amounts**: Explicit rupee allocations validated against total cost.
 3. **Percentage Split**: Custom percentages summing to 100%, fractional remainders distributed by largest decimal component.
