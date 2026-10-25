@@ -43,7 +43,6 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
   const [items, setItems] = useState([
     { name: '', amountINR: '', assignedUserIds: [] },
   ]);
-  const [sharedTaxINR, setSharedTaxINR] = useState('');
 
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -53,12 +52,13 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
     if (!isOpen) return;
     setError('');
 
+    const defaultMemberIds = (groupMembers || []).map((m) => Number(m.user_id));
+
     if (editExpense) {
       setDescription(editExpense.description);
       setAmountINR((Number(editExpense.total_amount_paise) / 100).toString());
       setCategory(editExpense.category || 'General');
       setExpenseDate(editExpense.expense_date ? editExpense.expense_date.split('T')[0] : '');
-      setNotes(editExpense.notes || '');
       setSplitType(editExpense.split_type || 'equal');
 
       // Payers
@@ -104,14 +104,23 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
           adjMap[pt.userId] = (Number(pt.adjustmentPaise || 0) / 100).toString();
         });
         setAdjustments(adjMap);
-      } else if (editExpense.split_type === 'itemized' && editExpense.items) {
+      }
+
+      if (editExpense.split_type === 'itemized' && editExpense.items && editExpense.items.length > 0) {
         setItems(
           editExpense.items.map((it) => ({
-            name: it.name,
+            name: it.name || '',
             amountINR: (Number(it.amountPaise) / 100).toString(),
-            assignedUserIds: it.assignedUserIds || [],
+            assignedUserIds:
+              it.assignedUserIds && it.assignedUserIds.length > 0
+                ? it.assignedUserIds.map(Number)
+                : defaultMemberIds,
           }))
         );
+      } else {
+        setItems([
+          { name: '', amountINR: '', assignedUserIds: defaultMemberIds },
+        ]);
       }
     } else {
       // Default creation state
@@ -119,7 +128,6 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
       setAmountINR('');
       setCategory('General');
       setExpenseDate(new Date().toISOString().split('T')[0]);
-      setNotes('');
       setSplitType('equal');
       setIsMultiplePayers(false);
 
@@ -230,9 +238,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
     };
   } else if (splitType === 'itemized') {
     const sumItemsPaise = items.reduce((acc, it) => acc + inrToPaise(it.amountINR), 0);
-    const taxPaise = inrToPaise(sharedTaxINR || 0);
-    const calculatedTotalPaise = sumItemsPaise + taxPaise;
-    const diff = totalPaise - calculatedTotalPaise;
+    const diff = totalPaise - sumItemsPaise;
     splitValidation = {
       valid: totalPaise > 0 && diff === 0 && items.length > 0,
       diffPaise: diff,
@@ -254,7 +260,11 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
   const handleAddItem = () => {
     setItems((prev) => [
       ...prev,
-      { name: '', amountINR: '', assignedUserIds: groupMembers.map((m) => m.user_id) },
+      {
+        name: '',
+        amountINR: '',
+        assignedUserIds: (groupMembers || []).map((m) => Number(m.user_id)),
+      },
     ]);
   };
 
@@ -271,14 +281,22 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
   };
 
   const toggleItemUser = (itemIndex, userId) => {
-    setItems((prev) => {
-      const copy = [...prev];
-      const curUsers = copy[itemIndex].assignedUserIds || [];
-      copy[itemIndex].assignedUserIds = curUsers.includes(userId)
-        ? curUsers.filter((id) => id !== userId)
-        : [...curUsers, userId];
-      return copy;
-    });
+    const targetId = Number(userId);
+    setItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== itemIndex) return item;
+        const currentList = (item.assignedUserIds || []).map(Number);
+        const exists = currentList.includes(targetId);
+        const updatedList = exists
+          ? currentList.filter((id) => id !== targetId)
+          : [...currentList, targetId];
+
+        return {
+          ...item,
+          assignedUserIds: updatedList,
+        };
+      })
+    );
   };
 
   const handleSubmit = async (e) => {
@@ -359,9 +377,12 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
         items: items.map((it) => ({
           name: it.name.trim() || 'Item',
           amountPaise: inrToPaise(it.amountINR),
-          assignedUserIds: it.assignedUserIds,
+          assignedUserIds:
+            it.assignedUserIds && it.assignedUserIds.length > 0
+              ? it.assignedUserIds.map(Number)
+              : (groupMembers || []).map((m) => Number(m.user_id)),
         })),
-        sharedTaxPaise: inrToPaise(sharedTaxINR || 0),
+        sharedTaxPaise: 0,
       };
     }
 
@@ -371,14 +392,12 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
         description: description.trim(),
         amountPaise: totalPaise,
         category,
-        notes: notes.trim(),
         expenseDate,
         splitType,
         payers: payloadPayers,
         splitData: payloadSplitData,
         participantIds: payloadParticipantIds,
         items: splitType === 'itemized' ? payloadSplitData.items : undefined,
-        sharedTaxPaise: splitType === 'itemized' ? payloadSplitData.sharedTaxPaise : undefined,
         reason: editReason,
       });
       onClose();
@@ -801,63 +820,49 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
                       Assigned Members:
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {groupMembers.map((m) => (
-                        <button
-                          type="button"
-                          key={m.user_id}
-                          onClick={() => toggleItemUser(idx, m.user_id)}
-                          className={`btn btn-sm ${
-                            (it.assignedUserIds || []).includes(m.user_id)
-                              ? 'btn-primary'
-                              : 'btn-secondary'
-                          }`}
-                          style={{ fontSize: '0.75rem', padding: '2px 8px' }}
-                        >
-                          {m.name}
-                        </button>
-                      ))}
+                      {groupMembers.map((m) => {
+                        const isAssigned = (it.assignedUserIds || []).map(Number).includes(Number(m.user_id));
+                        return (
+                          <button
+                            type="button"
+                            key={m.user_id}
+                            onClick={() => toggleItemUser(idx, m.user_id)}
+                            className={`btn btn-sm ${isAssigned ? 'btn-primary' : 'btn-outline'}`}
+                            style={{
+                              fontSize: '0.78rem',
+                              padding: '3px 10px',
+                              borderRadius: 'var(--radius-full)',
+                              background: isAssigned ? 'var(--primary)' : 'var(--bg-subtle)',
+                              color: isAssigned ? '#ffffff' : 'var(--text-muted)',
+                              border: isAssigned ? '1px solid var(--primary)' : '1px solid var(--border-light)',
+                              fontWeight: isAssigned ? 600 : 500,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <span>{isAssigned ? '✓' : '+'}</span>
+                            <span>{m.name}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
-
-                <div className="form-group" style={{ marginTop: 12 }}>
-                  <label className="form-label">Shared Taxes / Fees / Delivery (₹)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    className="form-input"
-                    placeholder="Shared GST / Service / Delivery charges"
-                    value={sharedTaxINR}
-                    onChange={(e) => setSharedTaxINR(e.target.value)}
-                  />
-                  <div className="form-helper">
-                    Distributed proportionally to each member's item subtotal.
-                  </div>
-                </div>
               </div>
             )}
           </div>
 
-          {/* Notes and Version Reason */}
-          <div className="form-group" style={{ marginTop: 16 }}>
-            <label className="form-label">Notes (Optional)</label>
-            <textarea
-              className="form-textarea"
-              rows="2"
-              placeholder="Additional details, receipts or bill references"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </div>
-
+          {/* Version Reason (when editing) */}
           {editExpense && (
-            <div className="form-group">
+            <div className="form-group" style={{ marginTop: 16 }}>
               <label className="form-label">Reason for Edit *</label>
               <input
                 type="text"
                 className="form-input"
-                placeholder="e.g. Corrected Priya share, added missing item"
+                placeholder="e.g. Corrected item shares, updated amounts"
                 value={editReason}
                 onChange={(e) => setEditReason(e.target.value)}
                 required
