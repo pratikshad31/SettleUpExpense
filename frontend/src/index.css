@@ -338,7 +338,7 @@ a:hover {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(15, 23, 42, 0.65);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -357,7 +357,17 @@ a:hover {
   max-height: 90vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  position: relative;
   animation: modalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-content > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .modal-header {
@@ -366,12 +376,14 @@ a:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .modal-body {
   padding: 22px;
   overflow-y: auto;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .modal-footer {
@@ -383,6 +395,7 @@ a:hover {
   background: #f8fafc;
   border-bottom-left-radius: var(--radius-lg);
   border-bottom-right-radius: var(--radius-lg);
+  flex-shrink: 0;
 }
 
 @keyframes modalPop {

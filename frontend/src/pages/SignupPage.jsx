@@ -10,7 +10,6 @@ export default function SignupPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [upiId, setUpiId] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -32,7 +31,6 @@ export default function SignupPage() {
         name: name.trim(),
         email: email.trim().toLowerCase(),
         password,
-        upi_id: upiId.trim() || undefined,
       });
       navigate('/dashboard');
     } catch (err) {
@@ -120,21 +118,6 @@ export default function SignupPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">UPI ID (Optional)</label>
-              <input
-                type="text"
-                name="upi_id"
-                className="form-input"
-                placeholder="username@okhdfcbank or 9876543210@paytm"
-                value={upiId}
-                onChange={(e) => setUpiId(e.target.value)}
-              />
-              <div className="form-helper">
-                Allows friends to generate instant UPI payment links to settle with you.
-              </div>
             </div>
 
             <button

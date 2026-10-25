@@ -34,8 +34,8 @@ export default function MarkPaidModal({ isOpen, onClose, onConfirm, settlement }
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Mark Settlement as Paid" maxWidth={460}>
-      <form onSubmit={handleSubmit}>
-        <div className="modal-body">
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, overflow: 'hidden' }}>
+        <div className="modal-body" style={{ flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
           {error && <div className="alert alert-danger">{error}</div>}
 
           <p style={{ fontSize: '0.925rem', marginBottom: 16 }}>

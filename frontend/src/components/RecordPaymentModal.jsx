@@ -85,8 +85,8 @@ export default function RecordPaymentModal({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Record Settlement Payment" maxWidth={500}>
-      <form onSubmit={handleSubmit}>
-        <div className="modal-body">
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, overflow: 'hidden' }}>
+        <div className="modal-body" style={{ flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
           {error && <div className="alert alert-danger">{error}</div>}
 
           <div className="form-group">

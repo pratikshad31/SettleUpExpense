@@ -396,8 +396,8 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
       title={editExpense ? 'Edit Expense' : 'Add New Expense'}
       maxWidth={680}
     >
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <div className="modal-body">
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, overflow: 'hidden' }}>
+        <div className="modal-body" style={{ flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
           {error && <div className="alert alert-danger">{error}</div>}
 
           {/* Basic Details */}
