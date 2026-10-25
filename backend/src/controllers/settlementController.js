@@ -143,9 +143,9 @@ async function markPaid(req, res, next) {
         throw { status: 400, message: 'Cannot mark a rejected settlement as paid' };
       }
 
-      // Check permission: debtor or creator or group creator
-      if (st.from_user !== req.user.id && st.created_by !== req.user.id && req.membership.role === 'member') {
-        throw { status: 403, message: 'Only the payer or group creator can mark this settlement as paid' };
+      // Check permission: strictly debtor/payer
+      if (Number(st.from_user) !== Number(req.user.id)) {
+        throw { status: 403, message: 'Only the payer can mark this settlement as paid' };
       }
 
       const prevStatus = st.status;
@@ -225,11 +225,11 @@ async function confirmSettlement(req, res, next) {
 
       // Permission check: strictly recipient (to_user).
       // Crucial: The payer themselves can NEVER confirm their own payment!
-      if (st.from_user === req.user.id) {
+      if (Number(st.from_user) === Number(req.user.id)) {
         throw { status: 403, message: 'The payer cannot confirm their own payment. Only the receiver can confirm.' };
       }
 
-      if (st.to_user !== req.user.id) {
+      if (Number(st.to_user) !== Number(req.user.id)) {
         throw { status: 403, message: 'Only the receiver can confirm this payment' };
       }
 
@@ -306,11 +306,11 @@ async function rejectSettlement(req, res, next) {
       }
 
       // Permission check: strictly recipient (to_user)
-      if (st.from_user === req.user.id) {
+      if (Number(st.from_user) === Number(req.user.id)) {
         throw { status: 403, message: 'The payer cannot reject this payment. Only the receiver can reject.' };
       }
 
-      if (st.to_user !== req.user.id) {
+      if (Number(st.to_user) !== Number(req.user.id)) {
         throw { status: 403, message: 'Only the receiver can reject this payment' };
       }
 
