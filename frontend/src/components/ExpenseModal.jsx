@@ -641,7 +641,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
             )}
 
             {splitType === 'percentage' && (
-              <div>
+              <div style={{ background: 'var(--bg-subtle)', padding: 14, borderRadius: 'var(--radius-md)' }}>
                 {groupMembers.map((m) => (
                   <div
                     key={m.user_id}
@@ -677,7 +677,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
             )}
 
             {splitType === 'shares' && (
-              <div>
+              <div style={{ background: 'var(--bg-subtle)', padding: 14, borderRadius: 'var(--radius-md)' }}>
                 {groupMembers.map((m) => (
                   <div
                     key={m.user_id}
@@ -712,7 +712,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
             )}
 
             {splitType === 'adjustment' && (
-              <div>
+              <div style={{ background: 'var(--bg-subtle)', padding: 14, borderRadius: 'var(--radius-md)' }}>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 8 }}>
                   Equal split base + positive or negative adjustment:
                 </p>
@@ -721,7 +721,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
                     key={m.user_id}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}
                   >
-                    <span style={{ flex: 1, fontSize: '0.9rem' }}>{m.name}</span>
+                    <span style={{ flex: 1, fontSize: '0.9rem', fontWeight: 500 }}>{m.name}</span>
                     <div style={{ width: 140 }}>
                       <input
                         type="number"
