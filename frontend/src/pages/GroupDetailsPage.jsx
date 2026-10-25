@@ -179,6 +179,10 @@ export default function GroupDetailsPage() {
 
   // Direct 1-click settlement for suggested transactions (immediately recalculates balances & min-cash-flow)
   const handleRecordSuggestedPayment = async (sug) => {
+    if (Number(sug.fromUser) !== Number(user?.id)) {
+      setToast({ message: 'You can only settle your own debts', type: 'error' });
+      return;
+    }
     const key = `${sug.fromUser}-${sug.toUser}`;
     try {
       setRecordingKey(key);
@@ -208,6 +212,10 @@ export default function GroupDetailsPage() {
 
   // Direct 1-click settlement for detailed debts
   const handleSettleDetailedDebt = async (debt) => {
+    if (Number(debt.fromUser) !== Number(user?.id)) {
+      setToast({ message: 'You can only settle your own debts', type: 'error' });
+      return;
+    }
     const key = `debt-${debt.fromUser}-${debt.toUser}`;
     try {
       setRecordingKey(key);
@@ -495,7 +503,7 @@ export default function GroupDetailsPage() {
 
           <button
             onClick={() => {
-              setDefaultPaymentData({});
+              setDefaultPaymentData({ fromUser: user?.id });
               setIsRecordPaymentOpen(true);
             }}
             className="btn btn-secondary btn-sm"
@@ -832,6 +840,7 @@ export default function GroupDetailsPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {suggestions.map((sug, idx) => {
                     const isSettling = recordingKey === `${sug.fromUser}-${sug.toUser}`;
+                    const isPayer = Number(sug.fromUser) === Number(user?.id);
                     return (
                       <div
                         key={idx}
@@ -882,7 +891,7 @@ export default function GroupDetailsPage() {
                             {formatINR(sug.amountPaise)}
                           </span>
 
-                          {sug.toUpiId && (
+                          {isPayer && sug.toUpiId && (
                             <button
                               type="button"
                               onClick={() => openUpiForUser(sug.toUser, sug.toName, sug.amountPaise)}
@@ -894,14 +903,26 @@ export default function GroupDetailsPage() {
                             </button>
                           )}
 
-                          <button
-                            type="button"
-                            onClick={() => handleRecordSuggestedPayment(sug)}
-                            className="btn btn-primary btn-sm"
-                            disabled={isSettling}
-                          >
-                            {isSettling ? 'Settling...' : 'Record Payment'}
-                          </button>
+                          {isPayer ? (
+                            <button
+                              type="button"
+                              onClick={() => handleRecordSuggestedPayment(sug)}
+                              className="btn btn-primary btn-sm"
+                              disabled={isSettling}
+                            >
+                              {isSettling ? 'Settling...' : 'Record Payment'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled
+                              className="btn btn-primary btn-sm"
+                              title="You can only settle your own debts"
+                              style={{ opacity: 0.5, cursor: 'not-allowed' }}
+                            >
+                              Record Payment
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -932,6 +953,7 @@ export default function GroupDetailsPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {detailedDebts.map((d, idx) => {
                     const isSettling = recordingKey === `debt-${d.fromUser}-${d.toUser}`;
+                    const isPayer = Number(d.fromUser) === Number(user?.id);
                     return (
                       <div
                         key={idx}
@@ -954,14 +976,26 @@ export default function GroupDetailsPage() {
                           <span style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--danger)' }}>
                             {formatINR(d.amountPaise)}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => handleSettleDetailedDebt(d)}
-                            className="btn btn-secondary btn-sm"
-                            disabled={isSettling}
-                          >
-                            {isSettling ? 'Settling...' : 'Settle'}
-                          </button>
+                          {isPayer ? (
+                            <button
+                              type="button"
+                              onClick={() => handleSettleDetailedDebt(d)}
+                              className="btn btn-secondary btn-sm"
+                              disabled={isSettling}
+                            >
+                              {isSettling ? 'Settling...' : 'Settle'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled
+                              className="btn btn-secondary btn-sm"
+                              title="You can only settle your own debts"
+                              style={{ opacity: 0.5, cursor: 'not-allowed' }}
+                            >
+                              Settle
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -985,7 +1019,7 @@ export default function GroupDetailsPage() {
             </div>
             <button
               onClick={() => {
-                setDefaultPaymentData({});
+                setDefaultPaymentData({ fromUser: user?.id });
                 setIsRecordPaymentOpen(true);
               }}
               className="btn btn-primary"
@@ -1004,7 +1038,7 @@ export default function GroupDetailsPage() {
               </p>
               <button
                 onClick={() => {
-                  setDefaultPaymentData({});
+                  setDefaultPaymentData({ fromUser: user?.id });
                   setIsRecordPaymentOpen(true);
                 }}
                 className="btn btn-primary"
@@ -1315,9 +1349,10 @@ export default function GroupDetailsPage() {
         onClose={() => setIsRecordPaymentOpen(false)}
         onSave={handleSaveSettlement}
         groupMembers={members.filter((m) => m.status === 'active')}
-        defaultFromUser={defaultPaymentData.fromUser}
+        defaultFromUser={defaultPaymentData.fromUser || user?.id}
         defaultToUser={defaultPaymentData.toUser}
         defaultAmountPaise={defaultPaymentData.amountPaise}
+        currentUserId={user?.id}
       />
 
       {/* MARK PAID MODAL */}

@@ -14,6 +14,7 @@ export default function RecordPaymentModal({
   defaultFromUser = null,
   defaultToUser = null,
   defaultAmountPaise = null,
+  currentUserId = null,
 }) {
   const [fromUser, setFromUser] = useState('');
   const [toUser, setToUser] = useState('');
@@ -29,11 +30,15 @@ export default function RecordPaymentModal({
     setError('');
 
     if (groupMembers && groupMembers.length >= 2) {
-      setFromUser(defaultFromUser ? defaultFromUser.toString() : groupMembers[0].user_id.toString());
+      const initialFrom = defaultFromUser
+        ? defaultFromUser.toString()
+        : (currentUserId ? currentUserId.toString() : groupMembers[0].user_id.toString());
+      setFromUser(initialFrom);
+      const remainingMembers = groupMembers.filter((m) => m.user_id.toString() !== initialFrom);
       setToUser(
         defaultToUser
           ? defaultToUser.toString()
-          : (groupMembers[1] ? groupMembers[1].user_id.toString() : '')
+          : (remainingMembers[0] ? remainingMembers[0].user_id.toString() : (groupMembers[1] ? groupMembers[1].user_id.toString() : ''))
       );
     }
 
@@ -46,7 +51,7 @@ export default function RecordPaymentModal({
     setPaymentMethod('upi');
     setReferenceId('');
     setNotes('');
-  }, [isOpen, defaultFromUser, defaultToUser, defaultAmountPaise, groupMembers]);
+  }, [isOpen, defaultFromUser, defaultToUser, defaultAmountPaise, groupMembers, currentUserId]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -55,6 +60,11 @@ export default function RecordPaymentModal({
     const fromId = Number(fromUser);
     const toId = Number(toUser);
     const amountPaise = inrToPaise(amountINR);
+
+    if (currentUserId && fromId !== Number(currentUserId)) {
+      setError('You can only settle your own debts');
+      return;
+    }
 
     if (fromId === toId) {
       setError('Payer and recipient cannot be the same member');
@@ -103,14 +113,21 @@ export default function RecordPaymentModal({
               className="form-select"
               value={fromUser}
               onChange={(e) => setFromUser(e.target.value)}
+              disabled={Boolean(currentUserId)}
+              title={currentUserId ? 'You can only settle your own debts' : undefined}
               required
             >
               {groupMembers.map((m) => (
                 <option key={m.user_id} value={m.user_id}>
-                  {m.name}
+                  {m.name} {currentUserId && Number(m.user_id) === Number(currentUserId) ? '(You)' : ''}
                 </option>
               ))}
             </select>
+            {currentUserId && (
+              <small style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>
+                You can only settle your own debts
+              </small>
+            )}
           </div>
 
           <div className="form-group">
