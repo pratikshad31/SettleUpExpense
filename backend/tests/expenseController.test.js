@@ -19,8 +19,8 @@ describe('Expense Controller (src/controllers/expenseController.js)', () => {
     user3 = u3.rows[0];
 
     const grp = await query(
-      `INSERT INTO groups (name, invite_code, created_by) VALUES ('Expense Testing Group', 'EXPTEST1', $1) RETURNING *`,
-      [user1.id]
+      `INSERT INTO groups (name, invite_code, created_by) VALUES ('Expense Testing Group', $1, $2) RETURNING *`,
+      ['EXP_' + Math.random().toString(36).substring(2, 7).toUpperCase(), user1.id]
     );
     testGroup = grp.rows[0];
 
@@ -128,7 +128,7 @@ describe('Expense Controller (src/controllers/expenseController.js)', () => {
       const res = createMockRes();
       await updateExpense(req, res, () => {});
       assert.strictEqual(res.statusCode, 403);
-      assert.match(res.body.error, /Only the creator or a group admin can edit/i);
+      assert.match(res.body.error, /Only the creator of this expense or the group creator can edit/i);
     });
 
     it('should allow creator to update expense, incrementing version to 2', async () => {

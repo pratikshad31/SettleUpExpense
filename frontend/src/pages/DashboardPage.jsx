@@ -249,7 +249,9 @@ export default function DashboardPage() {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                     <h4 style={{ fontSize: '1.15rem' }}>{grp.name}</h4>
-                    <span className={`badge badge-${grp.role}`}>{grp.role}</span>
+                    <span className={`badge ${grp.display_role === 'creator' || grp.created_by === user?.id || grp.role === 'owner' ? 'badge-creator' : 'badge-member'}`}>
+                      {grp.display_role === 'creator' || grp.created_by === user?.id || grp.role === 'owner' ? 'Creator' : 'Member'}
+                    </span>
                   </div>
 
                   <p
@@ -394,7 +396,7 @@ export default function DashboardPage() {
               />
             </div>
             <div className="form-helper">
-              Enter the 8-character invitation code shared by the group owner or admin.
+              Enter the 8-character invitation code shared by the group creator or members.
             </div>
           </div>
           <div className="modal-footer">

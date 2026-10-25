@@ -294,9 +294,11 @@ a:hover {
   letter-spacing: 0.03em;
 }
 
-.badge-owner {
+.badge-owner,
+.badge-creator {
   background: #fef3c7;
   color: #92400e;
+  font-weight: 600;
 }
 
 .badge-admin {

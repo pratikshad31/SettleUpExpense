@@ -164,7 +164,7 @@ export default function LoginPage() {
                 onClick={() => handleQuickLogin('aarav@example.com')}
                 disabled={loading}
               >
-                Aarav (Owner)
+                Aarav (Creator)
               </button>
               <button
                 type="button"
@@ -172,7 +172,7 @@ export default function LoginPage() {
                 onClick={() => handleQuickLogin('priya@example.com')}
                 disabled={loading}
               >
-                Priya (Admin)
+                Priya
               </button>
               <button
                 type="button"
@@ -180,7 +180,7 @@ export default function LoginPage() {
                 onClick={() => handleQuickLogin('rohan@example.com')}
                 disabled={loading}
               >
-                Rohan (Member)
+                Rohan
               </button>
               <button
                 type="button"
@@ -188,7 +188,7 @@ export default function LoginPage() {
                 onClick={() => handleQuickLogin('vikram@example.com')}
                 disabled={loading}
               >
-                Vikram (Member)
+                Vikram
               </button>
             </div>
           </div>

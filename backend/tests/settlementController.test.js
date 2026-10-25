@@ -26,8 +26,8 @@ describe('Settlement Controller (src/controllers/settlementController.js)', () =
     thirdUser = u3.rows[0];
 
     const grp = await query(
-      `INSERT INTO groups (name, invite_code, created_by) VALUES ('Settlement Test Group', 'STTEST01', $1) RETURNING *`,
-      [payerUser.id]
+      `INSERT INTO groups (name, invite_code, created_by) VALUES ('Settlement Test Group', $1, $2) RETURNING *`,
+      ['ST_' + Math.random().toString(36).substring(2, 7).toUpperCase(), payerUser.id]
     );
     testGroup = grp.rows[0];
 
@@ -167,7 +167,7 @@ describe('Settlement Controller (src/controllers/settlementController.js)', () =
       });
       assert.ok(errThrown);
       assert.strictEqual(errThrown.status, 403);
-      assert.match(errThrown.message, /Only the payment recipient or group admin/i);
+      assert.match(errThrown.message, /Only the payment recipient or group creator/i);
     });
 
     it('should allow recipient to confirm settlement', async () => {

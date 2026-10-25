@@ -369,9 +369,9 @@ async function updateExpense(req, res, next) {
       return res.status(400).json({ error: 'Cannot update a voided expense' });
     }
 
-    // Permission check: only creator or group admin/owner
+    // Permission check: only expense creator or group creator
     if (currentExpense.created_by !== req.user.id && req.membership.role === 'member') {
-      return res.status(403).json({ error: 'Only the creator or a group admin can edit this expense' });
+      return res.status(403).json({ error: 'Only the creator of this expense or the group creator can edit it' });
     }
 
     const totalPaise = rawAmountPaise !== undefined ? Number(rawAmountPaise) : toPaise(amountINR);
@@ -537,7 +537,7 @@ async function voidExpense(req, res, next) {
 
     // Permission check
     if (currentExpense.created_by !== req.user.id && req.membership.role === 'member') {
-      return res.status(403).json({ error: 'Only the creator or a group admin can void this expense' });
+      return res.status(403).json({ error: 'Only the creator of this expense or the group creator can void it' });
     }
 
     const voidedExpense = await withTransaction(async (client) => {

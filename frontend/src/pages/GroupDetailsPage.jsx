@@ -335,7 +335,9 @@ export default function GroupDetailsPage() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
               <h2 style={{ fontSize: '1.6rem' }}>{group.name}</h2>
-              <span className={`badge badge-${membership?.role}`}>{membership?.role}</span>
+              <span className={`badge ${group.created_by === user?.id || membership?.role === 'owner' ? 'badge-creator' : 'badge-member'}`}>
+                {group.created_by === user?.id || membership?.role === 'owner' ? 'Creator' : 'Member'}
+              </span>
             </div>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', maxWidth: 650 }}>
               {group.description || 'Shared expense pool'}
@@ -947,7 +949,7 @@ export default function GroupDetailsPage() {
                     {settlements.map((st) => {
                       const isDebtor = st.from_user === user?.id;
                       const isCreditor = st.to_user === user?.id;
-                      const isAdmin = membership?.role === 'admin' || membership?.role === 'owner';
+                      const isCreator = group?.created_by === user?.id || membership?.role === 'owner';
 
                       return (
                         <tr key={st.id}>
@@ -988,7 +990,7 @@ export default function GroupDetailsPage() {
                               )}
 
                               {/* Mark Paid action (for debtor when pending) */}
-                              {st.status === 'pending' && (isDebtor || isAdmin) && (
+                              {st.status === 'pending' && (isDebtor || isCreator) && (
                                 <button
                                   onClick={() => {
                                     setMarkingSettlement(st);
@@ -1000,9 +1002,9 @@ export default function GroupDetailsPage() {
                                 </button>
                               )}
 
-                              {/* Confirm & Reject actions (strictly for recipient or admin) */}
+                              {/* Confirm & Reject actions (for recipient or group creator) */}
                               {(st.status === 'marked_paid' || st.status === 'pending') &&
-                                (isCreditor || isAdmin) && (
+                                (isCreditor || isCreator) && (
                                   <>
                                     <button
                                       onClick={() => handleConfirmSettlement(st.id)}
@@ -1068,7 +1070,11 @@ export default function GroupDetailsPage() {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className={`badge badge-${m.role}`}>{m.role}</span>
+                      {(m.user_id === group.created_by || m.display_role === 'creator' || m.role === 'owner') ? (
+                        <span className="badge badge-creator">Creator</span>
+                      ) : (
+                        <span className="badge badge-member">Member</span>
+                      )}
                       {m.status === 'inactive' && (
                         <span className="badge badge-member">Left</span>
                       )}
@@ -1106,28 +1112,26 @@ export default function GroupDetailsPage() {
                 </div>
               </div>
 
-              {/* Add Member by Email (Admin / Owner) */}
-              {(membership?.role === 'admin' || membership?.role === 'owner') && (
-                <div className="card" style={{ marginBottom: 16 }}>
-                  <h4 style={{ marginBottom: 8 }}>Add Member by Email</h4>
-                  <form onSubmit={handleAddMember}>
-                    <div className="form-group">
-                      <input
-                        type="email"
-                        className="form-input"
-                        placeholder="friend@example.com"
-                        value={addMemberEmail}
-                        onChange={(e) => setAddMemberEmail(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <button type="submit" className="btn btn-primary btn-sm" disabled={addMemberLoading}>
-                      <UserPlus size={14} />
-                      <span>{addMemberLoading ? 'Adding...' : 'Add Member'}</span>
-                    </button>
-                  </form>
-                </div>
-              )}
+              {/* Add Member by Email */}
+              <div className="card" style={{ marginBottom: 16 }}>
+                <h4 style={{ marginBottom: 8 }}>Add Member by Email</h4>
+                <form onSubmit={handleAddMember}>
+                  <div className="form-group">
+                    <input
+                      type="email"
+                      className="form-input"
+                      placeholder="friend@example.com"
+                      value={addMemberEmail}
+                      onChange={(e) => setAddMemberEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={addMemberLoading}>
+                    <UserPlus size={14} />
+                    <span>{addMemberLoading ? 'Adding...' : 'Add Member'}</span>
+                  </button>
+                </form>
+              </div>
 
               {/* Leave Group */}
               <div className="card">

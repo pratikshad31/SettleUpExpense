@@ -130,9 +130,9 @@ async function markPaid(req, res, next) {
         throw { status: 400, message: 'Cannot mark a rejected settlement as paid' };
       }
 
-      // Check permission: debtor or creator or admin
+      // Check permission: debtor or creator or group creator
       if (st.from_user !== req.user.id && st.created_by !== req.user.id && req.membership.role === 'member') {
-        throw { status: 403, message: 'Only the payer or group admin can mark this settlement as paid' };
+        throw { status: 403, message: 'Only the payer or group creator can mark this settlement as paid' };
       }
 
       const prevStatus = st.status;
@@ -210,14 +210,14 @@ async function confirmSettlement(req, res, next) {
         throw { status: 400, message: 'Cannot confirm a rejected settlement' };
       }
 
-      // Permission check: strictly recipient (to_user) or group admin/owner.
+      // Permission check: strictly recipient (to_user) or group creator.
       // Crucial: The payer themselves can NEVER confirm their own payment!
       if (st.from_user === req.user.id) {
-        throw { status: 403, message: 'The payer cannot confirm their own payment. Only the recipient or group admin can confirm.' };
+        throw { status: 403, message: 'The payer cannot confirm their own payment. Only the recipient or group creator can confirm.' };
       }
 
       if (st.to_user !== req.user.id && req.membership.role === 'member') {
-        throw { status: 403, message: 'Only the payment recipient or group admin can confirm receipt of payment' };
+        throw { status: 403, message: 'Only the payment recipient or group creator can confirm receipt of payment' };
       }
 
       const prevStatus = st.status;
@@ -292,9 +292,9 @@ async function rejectSettlement(req, res, next) {
         throw { status: 400, message: 'Settlement is already rejected' };
       }
 
-      // Permission check: recipient (to_user) or group admin/owner
+      // Permission check: recipient (to_user) or group creator
       if (st.to_user !== req.user.id && req.membership.role === 'member') {
-        throw { status: 403, message: 'Only the payment recipient or group admin can reject this settlement' };
+        throw { status: 403, message: 'Only the payment recipient or group creator can reject this settlement' };
       }
 
       const prevStatus = st.status;

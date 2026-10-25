@@ -70,7 +70,8 @@ async function getUserGroups(req, res, next) {
 
     // Fetch groups user belongs to
     const groupsRes = await query(
-      `SELECT g.id, g.name, g.description, g.invite_code, g.created_at, gm.role, gm.status,
+      `SELECT g.id, g.name, g.description, g.invite_code, g.created_by, g.created_at, gm.role, gm.status,
+              CASE WHEN gm.user_id = g.created_by THEN 'creator' ELSE 'member' END AS display_role,
               (SELECT COUNT(*) FROM group_members WHERE group_id = g.id AND status = 'active')::int AS member_count,
               (SELECT COUNT(*) FROM expenses WHERE group_id = g.id AND is_voided = false)::int AS expense_count
        FROM groups g
@@ -143,13 +144,16 @@ async function getGroupDetails(req, res, next) {
     }
 
     const membersRes = await query(
-      `SELECT gm.id AS membership_id, gm.role, gm.status, gm.joined_at,
+      `SELECT gm.id AS membership_id, 
+              CASE WHEN gm.user_id = g.created_by THEN 'creator' ELSE 'member' END AS display_role,
+              gm.role, gm.status, gm.joined_at,
               u.id AS user_id, u.name, u.email, u.upi_id
        FROM group_members gm
+       JOIN groups g ON g.id = gm.group_id
        JOIN users u ON u.id = gm.user_id
        WHERE gm.group_id = $1
        ORDER BY 
-         CASE WHEN gm.role = 'owner' THEN 1 WHEN gm.role = 'admin' THEN 2 ELSE 3 END,
+         CASE WHEN gm.user_id = g.created_by THEN 1 ELSE 2 END,
          gm.joined_at ASC`,
       [groupId]
     );
