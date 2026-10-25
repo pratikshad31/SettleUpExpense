@@ -253,6 +253,11 @@ export default function GroupDetailsPage() {
 
   // Confirm Settlement Handler (Concurrency-safe)
   const handleConfirmSettlement = async (settlementId) => {
+    const st = settlements.find((s) => s.id === settlementId);
+    if (st && Number(st.to_user) !== Number(user?.id)) {
+      setToast({ message: 'Only the receiver can confirm this payment', type: 'error' });
+      return;
+    }
     try {
       await api.post(`/settlements/${settlementId}/confirm`, {});
       setToast({ message: 'Payment confirmed! Group balances have been updated.', type: 'success' });
@@ -264,6 +269,11 @@ export default function GroupDetailsPage() {
 
   // Reject Settlement Handler (Modal-based, no window.prompt)
   const handleRejectSettlement = (settlementId) => {
+    const st = settlements.find((s) => s.id === settlementId);
+    if (st && Number(st.to_user) !== Number(user?.id)) {
+      setToast({ message: 'Only the receiver can reject this payment', type: 'error' });
+      return;
+    }
     setConfirmDialog({
       title: 'Reject Settlement Payment',
       message: 'Are you sure you want to reject this payment record? You can optionally enter a reason below.',
@@ -1142,9 +1152,8 @@ export default function GroupDetailsPage() {
                   </thead>
                   <tbody>
                     {settlements.map((st) => {
-                      const isDebtor = st.from_user === user?.id;
-                      const isCreditor = st.to_user === user?.id;
-                      const isCreator = group?.created_by === user?.id || membership?.role === 'owner';
+                      const isDebtor = Number(st.from_user) === Number(user?.id);
+                      const isCreditor = Number(st.to_user) === Number(user?.id);
 
                       return (
                         <tr key={st.id}>
@@ -1171,8 +1180,8 @@ export default function GroupDetailsPage() {
                           </td>
                           <td>
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                              {/* UPI QR Button */}
-                              {st.to_user_upi && (
+                              {/* UPI QR Button (debtor only) */}
+                              {isDebtor && st.to_user_upi && (
                                 <button
                                   onClick={() =>
                                     openUpiForUser(st.to_user, st.to_user_name, st.amount_paise)
@@ -1184,8 +1193,8 @@ export default function GroupDetailsPage() {
                                 </button>
                               )}
 
-                              {/* Mark Paid action (for debtor when pending) */}
-                              {st.status === 'pending' && (isDebtor || isCreator) && (
+                              {/* Mark Paid action (strictly for debtor when pending) */}
+                              {st.status === 'pending' && isDebtor && (
                                 <button
                                   onClick={() => {
                                     setMarkingSettlement(st);
@@ -1197,7 +1206,7 @@ export default function GroupDetailsPage() {
                                 </button>
                               )}
 
-                              {/* Confirm & Reject actions (strictly for recipient) */}
+                              {/* Confirm & Reject actions (strictly for receiver / recipient) */}
                               {(st.status === 'marked_paid' || st.status === 'pending') && isCreditor && (
                                 <>
                                   <button

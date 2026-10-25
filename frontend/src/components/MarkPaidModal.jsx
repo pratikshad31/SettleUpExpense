@@ -84,7 +84,7 @@ export default function MarkPaidModal({ isOpen, onClose, onConfirm, settlement }
             Cancel
           </button>
           <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting ? 'Marking...' : 'Confirm Marked Paid'}
+            {submitting ? 'Marking as Paid...' : 'Mark as Paid'}
           </button>
         </div>
       </form>
