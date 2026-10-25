@@ -24,9 +24,7 @@ The application calculates and displays exactly **who owes whom**, maintains a m
 1. **Equal Split**: Even division among selected members with deterministic 1-paisa remainder allocation.
 2. **Exact Amounts**: Explicit rupee allocations validated against total cost.
 3. **Percentage Split**: Custom percentages summing to 100%, fractional remainders distributed by largest decimal component.
-4. **Shares / Weights**: Proportional units (e.g. 3:2:1 ratio), remainders distributed deterministically.
-5. **Adjustments**: Equal split base plus individual positive/negative adjustments (e.g. beverage surcharges).
-6. **Itemized Split**: Item-level breakdown assigned to specific members + shared taxes/fees distributed proportionally.
+4. **Itemized Split**: Item-level breakdown assigned to specific members + shared taxes/fees distributed proportionally.
 
 ### 3. Multiple Payers & Subset Participants
 - Expenses can be funded by **one or multiple payers** with independent contribution amounts.
