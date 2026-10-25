@@ -905,18 +905,7 @@ export default function GroupDetailsPage() {
                             {formatINR(sug.amountPaise)}
                           </span>
 
-                          {isPayer && sug.toUpiId && !pendingForSug && (
-                            <button
-                              type="button"
-                              onClick={() => openUpiForUser(sug.toUser, sug.toName, sug.amountPaise)}
-                              className="btn btn-outline btn-sm"
-                              title="Open UPI QR / Link"
-                            >
-                              <QrCode size={14} />
-                              <span>Pay UPI</span>
-                            </button>
-                          )}
-
+                          {/* 1. When status is PENDING and logged-in user is the receiver: Show Confirm / Reject */}
                           {pendingForSug ? (
                             isReceiver ? (
                               <div style={{ display: 'flex', gap: 6 }}>
@@ -927,7 +916,7 @@ export default function GroupDetailsPage() {
                                   title="Confirm payment received (updates balances)"
                                 >
                                   <CheckCircle size={14} />
-                                  <span>Confirm Payment</span>
+                                  <span>Confirm</span>
                                 </button>
                                 <button
                                   type="button"
@@ -940,36 +929,40 @@ export default function GroupDetailsPage() {
                                   <span>Reject</span>
                                 </button>
                               </div>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled
-                                className="btn btn-secondary btn-sm"
-                                title="Payment recorded and is pending recipient confirmation"
-                                style={{ opacity: 0.7, cursor: 'not-allowed' }}
+                            ) : isPayer ? (
+                              <span
+                                className="badge badge-pending"
+                                style={{ fontSize: '0.8rem', padding: '4px 8px' }}
+                                title="Payment recorded. Waiting for recipient to confirm."
                               >
                                 Pending Confirmation
-                              </button>
-                            )
-                          ) : isPayer ? (
-                            <button
-                              type="button"
-                              onClick={() => handleRecordSuggestedPayment(sug)}
-                              className="btn btn-primary btn-sm"
-                              disabled={isSettling}
-                            >
-                              {isSettling ? 'Recording...' : 'Record Payment'}
-                            </button>
+                              </span>
+                            ) : null
                           ) : (
-                            <button
-                              type="button"
-                              disabled
-                              className="btn btn-primary btn-sm"
-                              title="You can only settle your own debts"
-                              style={{ opacity: 0.5, cursor: 'not-allowed' }}
-                            >
-                              Record Payment
-                            </button>
+                            /* 2. When not pending and logged-in user is the payer: Show Record Payment */
+                            isPayer ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                {sug.toUpiId && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openUpiForUser(sug.toUser, sug.toName, sug.amountPaise)}
+                                    className="btn btn-outline btn-sm"
+                                    title="Open UPI QR / Link"
+                                  >
+                                    <QrCode size={14} />
+                                    <span>Pay UPI</span>
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRecordSuggestedPayment(sug)}
+                                  className="btn btn-primary btn-sm"
+                                  disabled={isSettling}
+                                >
+                                  {isSettling ? 'Recording...' : 'Record Payment'}
+                                </button>
+                              </div>
+                            ) : null /* 3. For all other cases, hide action buttons completely */
                           )}
                         </div>
                       </div>
@@ -1031,6 +1024,8 @@ export default function GroupDetailsPage() {
                           <span style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--danger)' }}>
                             {formatINR(d.amountPaise)}
                           </span>
+
+                          {/* 1. When status is PENDING and logged-in user is the receiver: Show Confirm / Reject */}
                           {pendingForDebt ? (
                             isReceiver ? (
                               <div style={{ display: 'flex', gap: 6 }}>
@@ -1054,36 +1049,27 @@ export default function GroupDetailsPage() {
                                   <span>Reject</span>
                                 </button>
                               </div>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled
-                                className="btn btn-secondary btn-sm"
-                                title="Payment recorded and is pending recipient confirmation"
-                                style={{ opacity: 0.7, cursor: 'not-allowed' }}
+                            ) : isPayer ? (
+                              <span
+                                className="badge badge-pending"
+                                style={{ fontSize: '0.8rem', padding: '4px 8px' }}
+                                title="Payment recorded. Waiting for recipient to confirm."
                               >
                                 Pending Confirmation
-                              </button>
-                            )
-                          ) : isPayer ? (
-                            <button
-                              type="button"
-                              onClick={() => handleSettleDetailedDebt(d)}
-                              className="btn btn-secondary btn-sm"
-                              disabled={isSettling}
-                            >
-                              {isSettling ? 'Recording...' : 'Settle'}
-                            </button>
+                              </span>
+                            ) : null
                           ) : (
-                            <button
-                              type="button"
-                              disabled
-                              className="btn btn-secondary btn-sm"
-                              title="You can only settle your own debts"
-                              style={{ opacity: 0.5, cursor: 'not-allowed' }}
-                            >
-                              Settle
-                            </button>
+                            /* 2. When not pending and logged-in user is the payer: Show Record Payment */
+                            isPayer ? (
+                              <button
+                                type="button"
+                                onClick={() => handleSettleDetailedDebt(d)}
+                                className="btn btn-primary btn-sm"
+                                disabled={isSettling}
+                              >
+                                {isSettling ? 'Recording...' : 'Record Payment'}
+                              </button>
+                            ) : null /* 3. For all other cases, hide action buttons completely */
                           )}
                         </div>
                       </div>
