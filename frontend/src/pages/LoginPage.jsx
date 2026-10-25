@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ArrowRightLeft, Lock, Mail, ArrowRight, UserCheck } from 'lucide-react';
+import { ArrowRightLeft, Lock, Mail, ArrowRight, UserCheck, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -96,7 +96,12 @@ export default function LoginPage() {
         </div>
 
         <div className="card" style={{ padding: 28 }}>
-          {error && <div className="alert alert-danger">{error}</div>}
+          {error && (
+            <div className="alert alert-danger">
+              <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>{error}</span>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">

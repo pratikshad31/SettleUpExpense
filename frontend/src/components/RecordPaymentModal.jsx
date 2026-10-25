@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
+import { AlertCircle } from 'lucide-react';
 import { inrToPaise } from '../utils/formatters';
 
 export default function RecordPaymentModal({
@@ -87,7 +88,12 @@ export default function RecordPaymentModal({
     <Modal isOpen={isOpen} onClose={onClose} title="Record Settlement Payment" maxWidth={500}>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, overflow: 'hidden' }}>
         <div className="modal-body" style={{ flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
-          {error && <div className="alert alert-danger">{error}</div>}
+          {error && (
+            <div className="alert alert-danger" style={{ marginBottom: 16 }}>
+              <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>{error}</span>
+            </div>
+          )}
 
           <div className="form-group">
             <label className="form-label">Who Paid? (Payer / Debtor) *</label>

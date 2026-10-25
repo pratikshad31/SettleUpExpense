@@ -18,6 +18,7 @@ import {
   TrendingUp,
   TrendingDown,
   CheckCircle,
+  AlertCircle,
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -330,7 +331,12 @@ export default function DashboardPage() {
       >
         <form onSubmit={handleCreateGroup}>
           <div className="modal-body">
-            {createError && <div className="alert alert-danger">{createError}</div>}
+            {createError && (
+              <div className="alert alert-danger">
+                <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>{createError}</span>
+              </div>
+            )}
             <div className="form-group">
               <label className="form-label">Group Name *</label>
               <input
@@ -381,7 +387,12 @@ export default function DashboardPage() {
       >
         <form onSubmit={handleJoinGroup}>
           <div className="modal-body">
-            {joinError && <div className="alert alert-danger">{joinError}</div>}
+            {joinError && (
+              <div className="alert alert-danger">
+                <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>{joinError}</span>
+              </div>
+            )}
             <div className="form-group">
               <label className="form-label">Invitation Code *</label>
               <input

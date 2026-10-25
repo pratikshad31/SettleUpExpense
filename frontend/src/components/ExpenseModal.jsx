@@ -398,7 +398,12 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
     >
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, overflow: 'hidden' }}>
         <div className="modal-body" style={{ flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
-          {error && <div className="alert alert-danger">{error}</div>}
+          {error && (
+            <div className="alert alert-danger" style={{ marginBottom: 16 }}>
+              <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>{error}</span>
+            </div>
+          )}
 
           {/* Basic Details */}
           <div className="grid-2">

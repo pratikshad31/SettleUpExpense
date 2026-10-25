@@ -10,6 +10,7 @@ import RecordPaymentModal from '../components/RecordPaymentModal';
 import MarkPaidModal from '../components/MarkPaidModal';
 import UpiQrModal from '../components/UpiQrModal';
 import Modal from '../components/Modal';
+import ConfirmModal from '../components/ConfirmModal';
 import Toast from '../components/Toast';
 import { formatINR, formatDate, formatDateTime } from '../utils/formatters';
 import {
@@ -198,16 +199,26 @@ export default function GroupDetailsPage() {
     }
   };
 
-  // Reject Settlement Handler
-  const handleRejectSettlement = async (settlementId) => {
-    const reason = window.prompt('Please enter a reason for rejection (optional):');
-    try {
-      await api.post(`/settlements/${settlementId}/reject`, { reason: reason || undefined });
-      setToast({ message: 'Settlement rejected.', type: 'info' });
-      await loadGroupData();
-    } catch (err) {
-      setToast({ message: err.message || 'Failed to reject settlement', type: 'error' });
-    }
+  // Reject Settlement Handler (Modal-based, no window.prompt)
+  const handleRejectSettlement = (settlementId) => {
+    setConfirmDialog({
+      title: 'Reject Settlement Payment',
+      message: 'Are you sure you want to reject this payment record? You can optionally enter a reason below.',
+      confirmText: 'Reject Payment',
+      type: 'danger',
+      inputPlaceholder: 'Reason for rejection (e.g. payment not received)',
+      onConfirm: async (reason) => {
+        try {
+          await api.post(`/settlements/${settlementId}/reject`, { reason: reason || undefined });
+          setToast({ message: 'Settlement rejected.', type: 'info' });
+          await loadGroupData();
+        } catch (err) {
+          setToast({ message: err.message || 'Failed to reject settlement', type: 'error' });
+        } finally {
+          setConfirmDialog(null);
+        }
+      },
+    });
   };
 
   // Add Member by Email Handler
@@ -228,19 +239,25 @@ export default function GroupDetailsPage() {
     }
   };
 
-  // Leave Group Handler
-  const handleLeaveGroup = async () => {
-    if (!window.confirm('Are you sure you want to leave this group? (Requires your net balance to be ₹0.00)')) {
-      return;
-    }
-
-    try {
-      await api.post(`/groups/${groupId}/leave`);
-      setToast({ message: 'You have left the group.', type: 'success' });
-      navigate('/dashboard');
-    } catch (err) {
-      setToast({ message: err.message || 'Cannot leave group', type: 'error' });
-    }
+  // Leave Group Handler (Modal-based, no window.confirm)
+  const handleLeaveGroup = () => {
+    setConfirmDialog({
+      title: 'Leave Group',
+      message: 'Are you sure you want to leave this group? You can only leave once your net balance is strictly ₹0.00 (all expenses and debts settled).',
+      confirmText: 'Leave Group',
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          await api.post(`/groups/${groupId}/leave`);
+          setToast({ message: 'You have left the group.', type: 'success' });
+          navigate('/dashboard');
+        } catch (err) {
+          setToast({ message: err.message || 'Cannot leave group', type: 'error' });
+        } finally {
+          setConfirmDialog(null);
+        }
+      },
+    });
   };
 
   // Open Full Expense Details Modal
@@ -625,9 +642,16 @@ export default function GroupDetailsPage() {
                                   </button>
                                   <button
                                     onClick={() => {
-                                      if (window.confirm(`Are you sure you want to void "${exp.description}"? Financial balances will be restored.`)) {
-                                        handleVoidExpense(exp.id);
-                                      }
+                                      setConfirmDialog({
+                                        title: 'Void Expense',
+                                        message: `Are you sure you want to void "${exp.description}"? Financial balances will be restored.`,
+                                        confirmText: 'Void Expense',
+                                        type: 'danger',
+                                        onConfirm: () => {
+                                          setConfirmDialog(null);
+                                          handleVoidExpense(exp.id);
+                                        },
+                                      });
                                     }}
                                     className="btn btn-outline btn-sm"
                                     style={{ color: 'var(--danger)' }}
@@ -1332,6 +1356,21 @@ export default function GroupDetailsPage() {
             </button>
           </div>
         </Modal>
+      )}
+
+      {/* CONFIRMATION / ACTION PROMPT MODAL */}
+      {confirmDialog && (
+        <ConfirmModal
+          isOpen={Boolean(confirmDialog)}
+          onClose={() => setConfirmDialog(null)}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          confirmText={confirmDialog.confirmText}
+          cancelText={confirmDialog.cancelText}
+          type={confirmDialog.type}
+          inputPlaceholder={confirmDialog.inputPlaceholder}
+          onConfirm={confirmDialog.onConfirm}
+        />
       )}
     </div>
   );

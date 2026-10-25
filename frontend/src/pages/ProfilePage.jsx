@@ -91,7 +91,12 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {profileError && <div className="alert alert-danger">{profileError}</div>}
+        {profileError && (
+          <div className="alert alert-danger">
+            <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>{profileError}</span>
+          </div>
+        )}
 
         <form onSubmit={handleUpdateProfile}>
           <div className="form-group">
@@ -145,7 +150,12 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {passwordError && <div className="alert alert-danger">{passwordError}</div>}
+        {passwordError && (
+          <div className="alert alert-danger">
+            <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>{passwordError}</span>
+          </div>
+        )}
 
         <form onSubmit={handleChangePassword}>
           <div className="form-group">

@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ArrowRightLeft, ArrowRight } from 'lucide-react';
+import { ArrowRightLeft, ArrowRight, AlertCircle } from 'lucide-react';
 
 export default function SignupPage() {
   const [name, setName] = useState('');
@@ -85,7 +85,12 @@ export default function SignupPage() {
         </div>
 
         <div className="card" style={{ padding: 28 }}>
-          {error && <div className="alert alert-danger">{error}</div>}
+          {error && (
+            <div className="alert alert-danger">
+              <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>{error}</span>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
