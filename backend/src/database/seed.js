@@ -30,6 +30,7 @@ async function seed() {
         { name: 'Rohan Iyer', email: 'rohan@example.com', upi: 'rohan@paytm' },
         { name: 'Ananya Gupta', email: 'ananya@example.com', upi: 'ananya@icici' },
         { name: 'Vikram Singh', email: 'vikram@example.com', upi: 'vikram@upi' },
+        { name: 'Pratiksha Dogare', email: 'dongarepratiksha62@gmail.com', upi: 'pratiksha@upi' },
       ];
 
       const users = [];

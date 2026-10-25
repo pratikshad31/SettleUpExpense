@@ -94,12 +94,13 @@ describe('Group Controller (src/controllers/groupController.js)', () => {
       assert.strictEqual(res.body.group.id, createdGroupId);
     });
 
-    it('should reject if already an active member', async () => {
+    it('should return alreadyMember status if already an active member', async () => {
       const req = { user: testUser2, body: { invite_code: inviteCode } };
       const res = createMockRes();
       await joinGroupByInviteCode(req, res, () => {});
-      assert.strictEqual(res.statusCode, 400);
-      assert.match(res.body.error, /already an active member/i);
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.body.alreadyMember, true);
+      assert.strictEqual(res.body.group.id, createdGroupId);
     });
   });
 

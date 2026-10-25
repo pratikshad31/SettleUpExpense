@@ -75,7 +75,7 @@ async function getUserGroups(req, res, next) {
               (SELECT COUNT(*) FROM expenses WHERE group_id = g.id AND is_voided = false)::int AS expense_count
        FROM groups g
        JOIN group_members gm ON g.id = gm.group_id
-       WHERE gm.user_id = $1
+       WHERE gm.user_id = $1 AND gm.status = 'active'
        ORDER BY g.created_at DESC`,
       [userId]
     );
@@ -170,12 +170,12 @@ async function getGroupDetails(req, res, next) {
 async function joinGroupByInviteCode(req, res, next) {
   try {
     const { invite_code } = req.body;
-    if (!invite_code || !invite_code.trim()) {
+    if (!invite_code || !invite_code.toString().trim()) {
       return res.status(400).json({ error: 'Invite code is required' });
     }
 
-    const cleanCode = invite_code.trim().toUpperCase();
-    const groupRes = await query('SELECT * FROM groups WHERE invite_code = $1', [cleanCode]);
+    const cleanCode = invite_code.toString().replace(/\s+/g, '').toUpperCase();
+    const groupRes = await query('SELECT * FROM groups WHERE UPPER(invite_code) = UPPER($1)', [cleanCode]);
 
     if (groupRes.rowCount === 0) {
       return res.status(404).json({ error: 'Invalid invitation code. Group not found.' });
@@ -193,9 +193,11 @@ async function joinGroupByInviteCode(req, res, next) {
     if (memberRes.rowCount > 0) {
       const existing = memberRes.rows[0];
       if (existing.status === 'active') {
-        return res.status(400).json({
-          error: 'You are already an active member of this group',
-          groupId: group.id,
+        // Return 200 with alreadyMember flag so user is gracefully directed into group
+        return res.status(200).json({
+          message: 'You are already an active member of this group',
+          group,
+          alreadyMember: true,
         });
       }
 
@@ -217,6 +219,7 @@ async function joinGroupByInviteCode(req, res, next) {
       return res.json({
         message: 'Rejoined group successfully',
         group,
+        rejoined: true,
       });
     }
 

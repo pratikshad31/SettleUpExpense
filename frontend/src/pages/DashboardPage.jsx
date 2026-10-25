@@ -89,7 +89,8 @@ export default function DashboardPage() {
   const handleJoinGroup = async (e) => {
     e.preventDefault();
     setJoinError('');
-    if (!inviteCode.trim()) {
+    const code = inviteCode ? inviteCode.replace(/\s+/g, '').toUpperCase() : '';
+    if (!code) {
       setJoinError('Invite code is required');
       return;
     }
@@ -97,11 +98,18 @@ export default function DashboardPage() {
     try {
       setJoinLoading(true);
       const res = await api.post('/groups/join', {
-        invite_code: inviteCode.trim(),
+        invite_code: code,
       });
       setIsJoinOpen(false);
       setInviteCode('');
-      setToast({ message: 'Joined group successfully!', type: 'success' });
+      setToast({
+        message: res.alreadyMember
+          ? `You are already a member of ${res.group?.name || 'this group'}! Opening group...`
+          : res.rejoined
+          ? `Welcome back! Rejoined ${res.group?.name || 'group'} successfully.`
+          : `Joined ${res.group?.name || 'group'} successfully!`,
+        type: 'success',
+      });
       await loadGroups();
       navigate(`/groups/${res.group.id}`);
     } catch (err) {
@@ -379,8 +387,9 @@ export default function DashboardPage() {
                 className="form-input"
                 placeholder="e.g. FLAT402B"
                 value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                onChange={(e) => setInviteCode(e.target.value.replace(/\s+/g, '').toUpperCase())}
                 style={{ textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}
+                autoFocus
                 required
               />
             </div>
