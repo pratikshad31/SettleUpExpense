@@ -463,7 +463,7 @@ export default function GroupDetailsPage() {
           onClick={() => setActiveTab('balances')}
         >
           <Scale size={17} />
-          <span>Balances & Who Owes Whom</span>
+          <span>Balances</span>
         </button>
 
         <button
@@ -693,7 +693,6 @@ export default function GroupDetailsPage() {
                     <th>Member</th>
                     <th>UPI ID</th>
                     <th>Total Paid</th>
-                    <th>Total Share (Owed)</th>
                     <th>Settlements Paid</th>
                     <th>Settlements Received</th>
                     <th>Net Balance</th>
@@ -709,7 +708,6 @@ export default function GroupDetailsPage() {
                         {b.upiId || '—'}
                       </td>
                       <td>{formatINR(b.totalPaidPaise)}</td>
-                      <td>{formatINR(b.totalOwedPaise)}</td>
                       <td style={{ color: 'var(--text-muted)' }}>{formatINR(b.settlementPaidPaise)}</td>
                       <td style={{ color: 'var(--text-muted)' }}>{formatINR(b.settlementReceivedPaise)}</td>
                       <td
@@ -735,183 +733,104 @@ export default function GroupDetailsPage() {
             </div>
           </div>
 
-          {/* Sub-toggle: Optimized vs Detailed */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                className={`btn btn-sm ${balanceViewMode === 'optimized' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setBalanceViewMode('optimized')}
-              >
-                <Sparkles size={14} /> Optimized Settlement Plan
-              </button>
-              <button
-                className={`btn btn-sm ${balanceViewMode === 'detailed' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setBalanceViewMode('detailed')}
-              >
-                <Users size={14} /> Detailed Person-to-Person Debts
-              </button>
-            </div>
-          </div>
-
-          {/* View 1: OPTIMIZED SETTLEMENT PLAN */}
-          {balanceViewMode === 'optimized' && (
-            <div className="card">
-              <div className="card-header">
-                <div>
-                  <h4>Optimized Settlement Suggestions</h4>
-                  <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                    Uses Greedy Min-Cash-Flow algorithm to settle all balances in minimum transactions (at most N - 1 payments).
-                  </p>
-                </div>
+          {/* Optimized Settlement Suggestions */}
+          <div className="card">
+            <div className="card-header">
+              <div>
+                <h4>Optimized Settlement Suggestions</h4>
+                <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                  Uses Greedy Min-Cash-Flow algorithm to settle all balances in minimum transactions (at most N - 1 payments).
+                </p>
               </div>
-
-              {suggestions.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
-                  <CheckCircle size={36} style={{ color: 'var(--primary)', marginBottom: 8 }} />
-                  <p style={{ fontWeight: 600 }}>Everyone is fully settled up in this group!</p>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {suggestions.map((sug, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: 14,
-                        borderRadius: 'var(--radius-md)',
-                        background: 'var(--bg-subtle)',
-                        border: '1px solid var(--border-light)',
-                        flexWrap: 'wrap',
-                        gap: 12,
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div
-                          style={{
-                            width: 36,
-                            height: 36,
-                            borderRadius: 'var(--radius-full)',
-                            background: '#fee2e2',
-                            color: 'var(--danger)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontWeight: 700,
-                          }}
-                        >
-                          {sug.fromName.charAt(0)}
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>
-                            <span>{sug.fromName}</span>
-                            <span style={{ color: 'var(--text-muted)', margin: '0 8px' }}>owes</span>
-                            <span style={{ color: 'var(--primary-dark)', fontWeight: 700 }}>{sug.toName}</span>
-                          </div>
-                          {sug.toUpiId && (
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                              UPI: {sug.toUpiId}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                        <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)' }}>
-                          {formatINR(sug.amountPaise)}
-                        </span>
-
-                        {sug.toUpiId && (
-                          <button
-                            onClick={() => openUpiForUser(sug.toUser, sug.toName, sug.amountPaise)}
-                            className="btn btn-outline btn-sm"
-                            title="Open UPI QR / Link"
-                          >
-                            <QrCode size={14} />
-                            <span>Pay UPI</span>
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() => {
-                            setDefaultPaymentData({
-                              fromUser: sug.fromUser,
-                              toUser: sug.toUser,
-                              amountPaise: sug.amountPaise,
-                            });
-                            setIsRecordPaymentOpen(true);
-                          }}
-                          className="btn btn-primary btn-sm"
-                        >
-                          Record Payment
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
-          )}
 
-          {/* View 2: DETAILED PERSON-TO-PERSON DEBTS */}
-          {balanceViewMode === 'detailed' && (
-            <div className="card">
-              <div className="card-header">
-                <div>
-                  <h4>Detailed Person-to-Person Debts</h4>
-                  <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                    Deterministic proportional payer attribution policy with bilateral reciprocal netting. Shows direct who-owes-whom before cross-settlement optimization.
-                  </p>
-                </div>
+            {suggestions.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
+                <CheckCircle size={36} style={{ color: 'var(--primary)', marginBottom: 8 }} />
+                <p style={{ fontWeight: 600 }}>Everyone is fully settled up in this group!</p>
               </div>
-
-              {detailedDebts.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
-                  No outstanding person-to-person debts.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {detailedDebts.map((d, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: 12,
-                        borderRadius: 'var(--radius-md)',
-                        border: '1px solid var(--border-light)',
-                        background: '#ffffff',
-                      }}
-                    >
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {suggestions.map((sug, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: 14,
+                      borderRadius: 'var(--radius-md)',
+                      background: 'var(--bg-subtle)',
+                      border: '1px solid var(--border-light)',
+                      flexWrap: 'wrap',
+                      gap: 12,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 'var(--radius-full)',
+                          background: '#fee2e2',
+                          color: 'var(--danger)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {sug.fromName.charAt(0)}
+                      </div>
                       <div>
-                        <strong>{d.fromName}</strong> owes <strong>{d.toName}</strong>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <span style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--danger)' }}>
-                          {formatINR(d.amountPaise)}
-                        </span>
-                        <button
-                          onClick={() => {
-                            setDefaultPaymentData({
-                              fromUser: d.fromUser,
-                              toUser: d.toUser,
-                              amountPaise: d.amountPaise,
-                            });
-                            setIsRecordPaymentOpen(true);
-                          }}
-                          className="btn btn-secondary btn-sm"
-                        >
-                          Settle
-                        </button>
+                        <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>
+                          <span>{sug.fromName}</span>
+                          <span style={{ color: 'var(--text-muted)', margin: '0 8px' }}>owes</span>
+                          <span style={{ color: 'var(--primary-dark)', fontWeight: 700 }}>{sug.toName}</span>
+                        </div>
+                        {sug.toUpiId && (
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                            UPI: {sug.toUpiId}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                        {formatINR(sug.amountPaise)}
+                      </span>
+
+                      {sug.toUpiId && (
+                        <button
+                          onClick={() => openUpiForUser(sug.toUser, sug.toName, sug.amountPaise)}
+                          className="btn btn-outline btn-sm"
+                          title="Open UPI QR / Link"
+                        >
+                          <QrCode size={14} />
+                          <span>Pay UPI</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => {
+                          setDefaultPaymentData({
+                            fromUser: sug.fromUser,
+                            toUser: sug.toUser,
+                            amountPaise: sug.amountPaise,
+                          });
+                          setIsRecordPaymentOpen(true);
+                        }}
+                        className="btn btn-primary btn-sm"
+                      >
+                        Record Payment
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
