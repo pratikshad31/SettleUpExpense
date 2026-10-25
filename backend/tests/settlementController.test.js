@@ -102,6 +102,26 @@ describe('Settlement Controller (src/controllers/settlementController.js)', () =
       assert.strictEqual(res.body.settlement.status, 'pending');
       assert.strictEqual(Number(res.body.settlement.amount_paise), 25000);
     });
+
+    it('should create settlement directly in confirmed status when settleImmediately is true', async () => {
+      const req = {
+        groupId: testGroup.id,
+        user: payerUser,
+        body: {
+          fromUser: payerUser.id,
+          toUser: recipientUser.id,
+          amountINR: 50,
+          status: 'confirmed',
+          settleImmediately: true,
+          notes: 'Settled from suggestion',
+        },
+      };
+      const res = createMockRes();
+      await createSettlement(req, res, () => {});
+      assert.strictEqual(res.statusCode, 201);
+      assert.strictEqual(res.body.settlement.status, 'confirmed');
+      assert.ok(res.body.settlement.confirmed_at);
+    });
   });
 
   describe('markPaid, confirmSettlement, and rejectSettlement', () => {

@@ -47,12 +47,15 @@ async function createSettlement(req, res, next) {
       return res.status(400).json({ error: 'Both payer and recipient must be active members of the group' });
     }
 
+    const isDirectSettlement = req.body.status === 'confirmed' || req.body.settleImmediately === true;
+    const initialStatus = isDirectSettlement ? 'confirmed' : 'pending';
+
     // Insert settlement inside a transaction
     const savedSettlement = await withTransaction(async (client) => {
       const result = await client.query(
         `INSERT INTO settlements 
-         (group_id, created_by, from_user, to_user, amount_paise, status, payment_method, reference_id, notes)
-         VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8)
+         (group_id, created_by, from_user, to_user, amount_paise, status, payment_method, reference_id, notes, confirmed_at, confirmed_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${isDirectSettlement ? 'CURRENT_TIMESTAMP' : 'NULL'}, ${isDirectSettlement ? '$2' : 'NULL'})
          RETURNING *`,
         [
           groupId,
@@ -60,6 +63,7 @@ async function createSettlement(req, res, next) {
           fromUserId,
           toUserId,
           amountPaise,
+          initialStatus,
           paymentMethod,
           referenceId ? referenceId.trim() : null,
           notes ? notes.trim() : null,
@@ -70,22 +74,29 @@ async function createSettlement(req, res, next) {
       // Record status history
       await client.query(
         `INSERT INTO settlement_status_history (settlement_id, previous_status, new_status, changed_by, notes)
-         VALUES ($1, NULL, 'pending', $2, $3)`,
-        [st.id, req.user.id, 'Settlement proposal created']
+         VALUES ($1, NULL, $2, $3, $4)`,
+        [
+          st.id,
+          initialStatus,
+          req.user.id,
+          isDirectSettlement ? 'Payment recorded and marked as settled' : 'Settlement proposal created',
+        ]
       );
 
       // Activity log
       await client.query(
         `INSERT INTO activity_logs (group_id, actor_id, entity_type, entity_id, action, metadata)
-         VALUES ($1, $2, 'settlement', $3, 'created', $4)`,
+         VALUES ($1, $2, 'settlement', $3, $4, $5)`,
         [
           groupId,
           req.user.id,
           st.id,
+          isDirectSettlement ? 'confirmed' : 'created',
           JSON.stringify({
             fromUser: fromUserId,
             toUser: toUserId,
             amountPaise,
+            status: initialStatus,
           }),
         ]
       );
@@ -94,7 +105,9 @@ async function createSettlement(req, res, next) {
     });
 
     res.status(201).json({
-      message: 'Settlement proposal created successfully',
+      message: isDirectSettlement
+        ? 'Settlement payment recorded and marked as settled. Group balances have been updated.'
+        : 'Settlement proposal created successfully',
       settlement: savedSettlement,
     });
   } catch (err) {
