@@ -369,11 +369,6 @@ async function updateExpense(req, res, next) {
       return res.status(400).json({ error: 'Cannot update a voided expense' });
     }
 
-    // Permission check: only expense creator or group creator
-    if (currentExpense.created_by !== req.user.id && req.membership.role === 'member') {
-      return res.status(403).json({ error: 'Only the creator of this expense or the group creator can edit it' });
-    }
-
     const totalPaise = rawAmountPaise !== undefined ? Number(rawAmountPaise) : toPaise(amountINR);
     if (isNaN(totalPaise) || totalPaise <= 0) {
       return res.status(400).json({ error: 'Expense amount must be greater than 0' });

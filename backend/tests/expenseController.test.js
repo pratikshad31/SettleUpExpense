@@ -117,18 +117,25 @@ describe('Expense Controller (src/controllers/expenseController.js)', () => {
       createdExp = res.body.expense;
     });
 
-    it('should prevent non-creator regular member from editing expense', async () => {
+    it('should allow non-creator regular group member to edit and update expense', async () => {
       const req = {
         groupId: testGroup.id,
         params: { expenseId: createdExp.id },
         user: user2,
         membership: { role: 'member' },
-        body: { description: 'Hacked Edit', amountINR: 600 },
+        body: {
+          description: 'Member Updated Expense',
+          amountINR: 600,
+          splitType: 'equal',
+          participantIds: [user1.id, user2.id],
+          reason: 'Updated by group member',
+        },
       };
       const res = createMockRes();
       await updateExpense(req, res, () => {});
-      assert.strictEqual(res.statusCode, 403);
-      assert.match(res.body.error, /Only the creator of this expense or the group creator can edit/i);
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.body.expense.description, 'Member Updated Expense');
+      assert.strictEqual(Number(res.body.expense.total_amount_paise), 60000);
     });
 
     it('should allow creator to update expense, incrementing version to 2', async () => {
@@ -148,7 +155,7 @@ describe('Expense Controller (src/controllers/expenseController.js)', () => {
       const res = createMockRes();
       await updateExpense(req, res, () => {});
       assert.strictEqual(res.statusCode, 200);
-      assert.strictEqual(res.body.expense.version, 2);
+      assert.strictEqual(res.body.expense.version, 3);
       assert.strictEqual(Number(res.body.expense.total_amount_paise), 75000);
     });
 
