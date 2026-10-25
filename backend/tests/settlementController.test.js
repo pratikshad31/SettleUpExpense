@@ -122,6 +122,25 @@ describe('Settlement Controller (src/controllers/settlementController.js)', () =
       assert.strictEqual(res.body.settlement.status, 'confirmed');
       assert.ok(res.body.settlement.confirmed_at);
     });
+
+    it('should reject settling debt if logged-in user is not the payer', async () => {
+      const req = {
+        groupId: testGroup.id,
+        user: recipientUser, // recipient, not the payer
+        body: {
+          fromUser: payerUser.id,
+          toUser: recipientUser.id,
+          amountINR: 50,
+          status: 'confirmed',
+          settleImmediately: true,
+          notes: 'Unauthorized settlement attempt',
+        },
+      };
+      const res = createMockRes();
+      await createSettlement(req, res, () => {});
+      assert.strictEqual(res.statusCode, 403);
+      assert.match(res.body.error, /only settle your own debts/i);
+    });
   });
 
   describe('markPaid, confirmSettlement, and rejectSettlement', () => {

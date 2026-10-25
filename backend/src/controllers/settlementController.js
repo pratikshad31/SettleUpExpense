@@ -48,6 +48,12 @@ async function createSettlement(req, res, next) {
     }
 
     const isDirectSettlement = req.body.status === 'confirmed' || req.body.settleImmediately === true;
+
+    // Only the person who owes the money (the payer) can settle their debt
+    if (isDirectSettlement && fromUserId !== req.user.id) {
+      return res.status(403).json({ error: 'You can only settle your own debts' });
+    }
+
     const initialStatus = isDirectSettlement ? 'confirmed' : 'pending';
 
     // Insert settlement inside a transaction
