@@ -20,8 +20,18 @@ export default function SignupPage() {
     e.preventDefault();
     setError('');
 
+    if (!name.trim()) {
+      setError('Please enter your full name');
+      return;
+    }
+
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError('Password must be at least 6 characters long');
       return;
     }
 
@@ -34,7 +44,7 @@ export default function SignupPage() {
       });
       navigate('/dashboard');
     } catch (err) {
-      setError(err.message || 'Registration failed');
+      setError(err.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }

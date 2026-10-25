@@ -28,7 +28,26 @@ async function request(endpoint, options = {}) {
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      const error = new Error(data.error || `HTTP error! status: ${response.status}`);
+      let errorMessage = data.error || data.message;
+      if (!errorMessage) {
+        if (response.status === 502 || response.status === 503 || response.status === 504) {
+          errorMessage = 'Unable to connect to the server. Please verify the backend service is running and try again.';
+        } else if (response.status === 409) {
+          errorMessage = 'An account with this email address already exists. Please sign in instead.';
+        } else if (response.status === 401) {
+          errorMessage = 'Invalid email or password. Please check your credentials and try again.';
+        } else if (response.status === 403) {
+          errorMessage = 'You do not have permission to perform this action.';
+        } else if (response.status === 404) {
+          errorMessage = 'The requested resource or service was not found.';
+        } else if (response.status === 500) {
+          errorMessage = 'A server error occurred. Please try again in a few moments.';
+        } else {
+          errorMessage = 'Something went wrong. Please try again.';
+        }
+      }
+
+      const error = new Error(errorMessage);
       error.status = response.status;
       error.data = data;
       throw error;
@@ -36,6 +55,11 @@ async function request(endpoint, options = {}) {
 
     return data;
   } catch (err) {
+    if (err.name === 'TypeError' && err.message && err.message.toLowerCase().includes('fetch')) {
+      const networkError = new Error('Cannot reach the server. Please check your connection and try again.');
+      networkError.status = 503;
+      throw networkError;
+    }
     throw err;
   }
 }

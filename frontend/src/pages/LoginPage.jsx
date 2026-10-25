@@ -22,12 +22,16 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
-    const formData = new FormData(e.currentTarget);
-    const targetEmail = (formData.get('email') || email || '').trim();
-    const targetPassword = formData.get('password') || password || '';
+    const targetEmail = (email || '').trim().toLowerCase();
+    const targetPassword = password || '';
 
-    if (!targetEmail || !targetPassword) {
-      setError('Email and password are required');
+    if (!targetEmail) {
+      setError('Please enter your email address');
+      return;
+    }
+
+    if (!targetPassword) {
+      setError('Please enter your password');
       return;
     }
 
@@ -36,7 +40,7 @@ export default function LoginPage() {
       await login(targetEmail, targetPassword);
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err.message || 'Invalid email or password');
+      setError(err.message || 'Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -48,10 +52,10 @@ export default function LoginPage() {
     setError('');
     try {
       setLoading(true);
-      await login(demoEmail, 'password123');
+      await login(demoEmail.trim().toLowerCase(), 'password123');
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err.message || 'Demo login failed');
+      setError(err.message || 'Unable to log in. Please try again.');
     } finally {
       setLoading(false);
     }
