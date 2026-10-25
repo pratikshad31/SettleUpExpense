@@ -47,21 +47,20 @@ async function createSettlement(req, res, next) {
       return res.status(400).json({ error: 'Both payer and recipient must be active members of the group' });
     }
 
-    const isDirectSettlement = req.body.status === 'confirmed' || req.body.settleImmediately === true;
-
     // Only the person who owes the money (the payer) can settle their debt
-    if (isDirectSettlement && fromUserId !== req.user.id) {
+    if (fromUserId !== req.user.id) {
       return res.status(403).json({ error: 'You can only settle your own debts' });
     }
 
-    const initialStatus = isDirectSettlement ? 'confirmed' : 'pending';
+    // When payer records a payment, status must always be set to PENDING
+    const initialStatus = 'pending';
 
     // Insert settlement inside a transaction
     const savedSettlement = await withTransaction(async (client) => {
       const result = await client.query(
         `INSERT INTO settlements 
          (group_id, created_by, from_user, to_user, amount_paise, status, payment_method, reference_id, notes, confirmed_at, confirmed_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${isDirectSettlement ? 'CURRENT_TIMESTAMP' : 'NULL'}, ${isDirectSettlement ? '$2' : 'NULL'})
+         VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8, NULL, NULL)
          RETURNING *`,
         [
           groupId,
@@ -69,7 +68,6 @@ async function createSettlement(req, res, next) {
           fromUserId,
           toUserId,
           amountPaise,
-          initialStatus,
           paymentMethod,
           referenceId ? referenceId.trim() : null,
           notes ? notes.trim() : null,
@@ -80,29 +78,27 @@ async function createSettlement(req, res, next) {
       // Record status history
       await client.query(
         `INSERT INTO settlement_status_history (settlement_id, previous_status, new_status, changed_by, notes)
-         VALUES ($1, NULL, $2, $3, $4)`,
+         VALUES ($1, NULL, 'pending', $2, $3)`,
         [
           st.id,
-          initialStatus,
           req.user.id,
-          isDirectSettlement ? 'Payment recorded and marked as settled' : 'Settlement proposal created',
+          notes || 'Payment recorded by payer (pending recipient confirmation)',
         ]
       );
 
       // Activity log
       await client.query(
         `INSERT INTO activity_logs (group_id, actor_id, entity_type, entity_id, action, metadata)
-         VALUES ($1, $2, 'settlement', $3, $4, $5)`,
+         VALUES ($1, $2, 'settlement', $3, 'created', $4)`,
         [
           groupId,
           req.user.id,
           st.id,
-          isDirectSettlement ? 'confirmed' : 'created',
           JSON.stringify({
             fromUser: fromUserId,
             toUser: toUserId,
             amountPaise,
-            status: initialStatus,
+            status: 'pending',
           }),
         ]
       );
@@ -111,9 +107,7 @@ async function createSettlement(req, res, next) {
     });
 
     res.status(201).json({
-      message: isDirectSettlement
-        ? 'Settlement payment recorded and marked as settled. Group balances have been updated.'
-        : 'Settlement proposal created successfully',
+      message: 'Settlement payment recorded successfully and is pending confirmation from the recipient.',
       settlement: savedSettlement,
     });
   } catch (err) {
@@ -229,14 +223,14 @@ async function confirmSettlement(req, res, next) {
         throw { status: 400, message: 'Cannot confirm a rejected settlement' };
       }
 
-      // Permission check: strictly recipient (to_user) or group creator.
+      // Permission check: strictly recipient (to_user).
       // Crucial: The payer themselves can NEVER confirm their own payment!
       if (st.from_user === req.user.id) {
-        throw { status: 403, message: 'The payer cannot confirm their own payment. Only the recipient or group creator can confirm.' };
+        throw { status: 403, message: 'The payer cannot confirm their own payment. Only the receiver can confirm.' };
       }
 
-      if (st.to_user !== req.user.id && req.membership.role === 'member') {
-        throw { status: 403, message: 'Only the payment recipient or group creator can confirm receipt of payment' };
+      if (st.to_user !== req.user.id) {
+        throw { status: 403, message: 'Only the receiver can confirm this payment' };
       }
 
       const prevStatus = st.status;
@@ -311,9 +305,13 @@ async function rejectSettlement(req, res, next) {
         throw { status: 400, message: 'Settlement is already rejected' };
       }
 
-      // Permission check: recipient (to_user) or group creator
-      if (st.to_user !== req.user.id && req.membership.role === 'member') {
-        throw { status: 403, message: 'Only the payment recipient or group creator can reject this settlement' };
+      // Permission check: strictly recipient (to_user)
+      if (st.from_user === req.user.id) {
+        throw { status: 403, message: 'The payer cannot reject this payment. Only the receiver can reject.' };
+      }
+
+      if (st.to_user !== req.user.id) {
+        throw { status: 403, message: 'Only the receiver can reject this payment' };
       }
 
       const prevStatus = st.status;

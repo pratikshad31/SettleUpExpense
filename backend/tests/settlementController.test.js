@@ -103,7 +103,7 @@ describe('Settlement Controller (src/controllers/settlementController.js)', () =
       assert.strictEqual(Number(res.body.settlement.amount_paise), 25000);
     });
 
-    it('should create settlement directly in confirmed status when settleImmediately is true', async () => {
+    it('should always set status to pending when payer records a payment, even if confirmed was requested', async () => {
       const req = {
         groupId: testGroup.id,
         user: payerUser,
@@ -119,8 +119,8 @@ describe('Settlement Controller (src/controllers/settlementController.js)', () =
       const res = createMockRes();
       await createSettlement(req, res, () => {});
       assert.strictEqual(res.statusCode, 201);
-      assert.strictEqual(res.body.settlement.status, 'confirmed');
-      assert.ok(res.body.settlement.confirmed_at);
+      assert.strictEqual(res.body.settlement.status, 'pending');
+      assert.strictEqual(res.body.settlement.confirmed_at, null);
     });
 
     it('should reject settling debt if logged-in user is not the payer', async () => {
@@ -192,12 +192,12 @@ describe('Settlement Controller (src/controllers/settlementController.js)', () =
       assert.match(errThrown.message, /payer cannot confirm their own payment/i);
     });
 
-    it('should prevent unrelated third-party member from confirming', async () => {
+    it('should prevent unrelated third-party member or group owner from confirming if not the receiver', async () => {
       const req = {
         groupId: testGroup.id,
         params: { settlementId: settlement.id },
         user: thirdUser,
-        membership: { role: 'member' },
+        membership: { role: 'owner' },
       };
       const res = createMockRes();
       let errThrown = null;
@@ -206,7 +206,7 @@ describe('Settlement Controller (src/controllers/settlementController.js)', () =
       });
       assert.ok(errThrown);
       assert.strictEqual(errThrown.status, 403);
-      assert.match(errThrown.message, /Only the payment recipient or group creator/i);
+      assert.match(errThrown.message, /Only the receiver/i);
     });
 
     it('should allow recipient to confirm settlement', async () => {
