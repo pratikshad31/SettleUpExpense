@@ -85,8 +85,7 @@ export default function RecordPaymentModal({
         paymentMethod,
         referenceId: referenceId.trim() || undefined,
         notes: notes.trim() || undefined,
-        status: 'confirmed',
-        settleImmediately: true,
+        status: 'pending',
       });
       onClose();
     } catch (err) {

@@ -169,7 +169,7 @@ export default function GroupDetailsPage() {
   const handleSaveSettlement = async (payload) => {
     try {
       await api.post(`/groups/${groupId}/settlements`, payload);
-      setToast({ message: 'Settlement recorded successfully!', type: 'success' });
+      setToast({ message: 'Settlement payment recorded as pending! Awaiting recipient confirmation.', type: 'success' });
       setIsRecordPaymentOpen(false);
       await loadGroupData();
     } catch (err) {
@@ -177,7 +177,7 @@ export default function GroupDetailsPage() {
     }
   };
 
-  // Direct 1-click settlement for suggested transactions (immediately recalculates balances & min-cash-flow)
+  // 1-click settlement proposal for suggested transactions (status PENDING until confirmed by receiver)
   const handleRecordSuggestedPayment = async (sug) => {
     if (Number(sug.fromUser) !== Number(user?.id)) {
       setToast({ message: 'You can only settle your own debts', type: 'error' });
@@ -191,17 +191,15 @@ export default function GroupDetailsPage() {
         toUser: sug.toUser,
         amountPaise: sug.amountPaise,
         paymentMethod: 'upi',
-        status: 'confirmed',
-        settleImmediately: true,
-        notes: `Settled from Optimized Settlement Plan`,
+        status: 'pending',
+        notes: `Payment recorded from Optimized Settlement Plan`,
       });
 
       setToast({
-        message: `Payment of ${formatINR(sug.amountPaise)} from ${sug.fromName} to ${sug.toName} marked as settled!`,
+        message: `Payment of ${formatINR(sug.amountPaise)} recorded as pending. Awaiting confirmation from ${sug.toName}.`,
         type: 'success',
       });
 
-      // Recalculates net balances, re-runs min-cash-flow, updates debts in real time
       await loadGroupData();
     } catch (err) {
       setToast({ message: err.message || 'Failed to record settlement', type: 'error' });
@@ -210,7 +208,7 @@ export default function GroupDetailsPage() {
     }
   };
 
-  // Direct 1-click settlement for detailed debts
+  // 1-click settlement proposal for detailed debts (status PENDING until confirmed by receiver)
   const handleSettleDetailedDebt = async (debt) => {
     if (Number(debt.fromUser) !== Number(user?.id)) {
       setToast({ message: 'You can only settle your own debts', type: 'error' });
@@ -224,13 +222,12 @@ export default function GroupDetailsPage() {
         toUser: debt.toUser,
         amountPaise: debt.amountPaise,
         paymentMethod: 'upi',
-        status: 'confirmed',
-        settleImmediately: true,
+        status: 'pending',
         notes: `Settled direct debt payment`,
       });
 
       setToast({
-        message: `Debt payment of ${formatINR(debt.amountPaise)} marked as settled!`,
+        message: `Payment of ${formatINR(debt.amountPaise)} recorded as pending. Awaiting confirmation from ${debt.toName}.`,
         type: 'success',
       });
 
@@ -841,6 +838,13 @@ export default function GroupDetailsPage() {
                   {suggestions.map((sug, idx) => {
                     const isSettling = recordingKey === `${sug.fromUser}-${sug.toUser}`;
                     const isPayer = Number(sug.fromUser) === Number(user?.id);
+                    const isReceiver = Number(sug.toUser) === Number(user?.id);
+                    const pendingForSug = settlements.find(
+                      (s) =>
+                        (s.status === 'pending' || s.status === 'marked_paid') &&
+                        Number(s.from_user) === Number(sug.fromUser) &&
+                        Number(s.to_user) === Number(sug.toUser)
+                    );
                     return (
                       <div
                         key={idx}
@@ -891,7 +895,7 @@ export default function GroupDetailsPage() {
                             {formatINR(sug.amountPaise)}
                           </span>
 
-                          {isPayer && sug.toUpiId && (
+                          {isPayer && sug.toUpiId && !pendingForSug && (
                             <button
                               type="button"
                               onClick={() => openUpiForUser(sug.toUser, sug.toName, sug.amountPaise)}
@@ -903,14 +907,48 @@ export default function GroupDetailsPage() {
                             </button>
                           )}
 
-                          {isPayer ? (
+                          {pendingForSug ? (
+                            isReceiver ? (
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleConfirmSettlement(pendingForSug.id)}
+                                  className="btn btn-primary btn-sm"
+                                  title="Confirm payment received (updates balances)"
+                                >
+                                  <CheckCircle size={14} />
+                                  <span>Confirm Payment</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRejectSettlement(pendingForSug.id)}
+                                  className="btn btn-outline btn-sm"
+                                  style={{ color: 'var(--danger)' }}
+                                  title="Reject payment"
+                                >
+                                  <XCircle size={14} />
+                                  <span>Reject</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled
+                                className="btn btn-secondary btn-sm"
+                                title="Payment recorded and is pending recipient confirmation"
+                                style={{ opacity: 0.7, cursor: 'not-allowed' }}
+                              >
+                                Pending Confirmation
+                              </button>
+                            )
+                          ) : isPayer ? (
                             <button
                               type="button"
                               onClick={() => handleRecordSuggestedPayment(sug)}
                               className="btn btn-primary btn-sm"
                               disabled={isSettling}
                             >
-                              {isSettling ? 'Settling...' : 'Record Payment'}
+                              {isSettling ? 'Recording...' : 'Record Payment'}
                             </button>
                           ) : (
                             <button
@@ -954,6 +992,13 @@ export default function GroupDetailsPage() {
                   {detailedDebts.map((d, idx) => {
                     const isSettling = recordingKey === `debt-${d.fromUser}-${d.toUser}`;
                     const isPayer = Number(d.fromUser) === Number(user?.id);
+                    const isReceiver = Number(d.toUser) === Number(user?.id);
+                    const pendingForDebt = settlements.find(
+                      (s) =>
+                        (s.status === 'pending' || s.status === 'marked_paid') &&
+                        Number(s.from_user) === Number(d.fromUser) &&
+                        Number(s.to_user) === Number(d.toUser)
+                    );
                     return (
                       <div
                         key={idx}
@@ -976,14 +1021,48 @@ export default function GroupDetailsPage() {
                           <span style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--danger)' }}>
                             {formatINR(d.amountPaise)}
                           </span>
-                          {isPayer ? (
+                          {pendingForDebt ? (
+                            isReceiver ? (
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleConfirmSettlement(pendingForDebt.id)}
+                                  className="btn btn-primary btn-sm"
+                                  title="Confirm payment received (updates balances)"
+                                >
+                                  <CheckCircle size={14} />
+                                  <span>Confirm</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRejectSettlement(pendingForDebt.id)}
+                                  className="btn btn-outline btn-sm"
+                                  style={{ color: 'var(--danger)' }}
+                                  title="Reject payment"
+                                >
+                                  <XCircle size={14} />
+                                  <span>Reject</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled
+                                className="btn btn-secondary btn-sm"
+                                title="Payment recorded and is pending recipient confirmation"
+                                style={{ opacity: 0.7, cursor: 'not-allowed' }}
+                              >
+                                Pending Confirmation
+                              </button>
+                            )
+                          ) : isPayer ? (
                             <button
                               type="button"
                               onClick={() => handleSettleDetailedDebt(d)}
                               className="btn btn-secondary btn-sm"
                               disabled={isSettling}
                             >
-                              {isSettling ? 'Settling...' : 'Settle'}
+                              {isSettling ? 'Recording...' : 'Settle'}
                             </button>
                           ) : (
                             <button
@@ -1118,28 +1197,28 @@ export default function GroupDetailsPage() {
                                 </button>
                               )}
 
-                              {/* Confirm & Reject actions (for recipient or group creator) */}
-                              {(st.status === 'marked_paid' || st.status === 'pending') &&
-                                (isCreditor || isCreator) && (
-                                  <>
-                                    <button
-                                      onClick={() => handleConfirmSettlement(st.id)}
-                                      className="btn btn-primary btn-sm"
-                                      title="Confirm payment received (updates balances)"
-                                    >
-                                      <CheckCircle size={14} />
-                                      <span>Confirm</span>
-                                    </button>
-                                    <button
-                                      onClick={() => handleRejectSettlement(st.id)}
-                                      className="btn btn-outline btn-sm"
-                                      style={{ color: 'var(--danger)' }}
-                                      title="Reject payment"
-                                    >
-                                      <XCircle size={14} />
-                                    </button>
-                                  </>
-                                )}
+                              {/* Confirm & Reject actions (strictly for recipient) */}
+                              {(st.status === 'marked_paid' || st.status === 'pending') && isCreditor && (
+                                <>
+                                  <button
+                                    onClick={() => handleConfirmSettlement(st.id)}
+                                    className="btn btn-primary btn-sm"
+                                    title="Confirm payment received (updates balances)"
+                                  >
+                                    <CheckCircle size={14} />
+                                    <span>Confirm</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleRejectSettlement(st.id)}
+                                    className="btn btn-outline btn-sm"
+                                    style={{ color: 'var(--danger)' }}
+                                    title="Reject payment"
+                                  >
+                                    <XCircle size={14} />
+                                    <span>Reject</span>
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
