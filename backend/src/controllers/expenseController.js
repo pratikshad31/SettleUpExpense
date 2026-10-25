@@ -387,6 +387,14 @@ async function updateExpense(req, res, next) {
       normalizedPayers = validatePayers(payers, totalPaise, activeMemberIds);
     }
 
+    // Verify all payers are active members (validatePayers enforces this for
+    // explicitly supplied payers; the defaulted payer must satisfy the same rule)
+    for (const p of normalizedPayers) {
+      if (!activeMemberIds.has(p.userId)) {
+        return res.status(400).json({ error: `Payer #${p.userId} is not an active member of this group` });
+      }
+    }
+
     let calculatedParticipants = [];
     let processedItems = [];
 
@@ -411,6 +419,13 @@ async function updateExpense(req, res, next) {
         splitData,
         participantIds || [...activeMemberIds]
       );
+    }
+
+    // Verify all participants are active members (same rule as createExpense)
+    for (const p of calculatedParticipants) {
+      if (!activeMemberIds.has(p.userId)) {
+        return res.status(400).json({ error: `Participant #${p.userId} is not an active member of this group` });
+      }
     }
 
     const nextVersion = currentExpense.version + 1;
