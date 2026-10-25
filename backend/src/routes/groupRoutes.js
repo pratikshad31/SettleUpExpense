@@ -22,8 +22,8 @@ router.post('/join', groupController.joinGroupByInviteCode);
 
 // Specific group details and membership
 router.get('/:groupId', requireGroupMember, groupController.getGroupDetails);
-router.post('/:groupId/members', requireGroupMember, groupController.addMember);
-router.put('/:groupId/members/:userId/role', requireGroupMember, groupController.updateMemberRole);
+router.post('/:groupId/members', requireGroupAdmin, groupController.addMember);
+router.put('/:groupId/members/:userId/role', requireGroupAdmin, groupController.updateMemberRole);
 router.post('/:groupId/leave', requireGroupMember, groupController.leaveGroup);
 
 // Expenses scoped to group
