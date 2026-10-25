@@ -66,13 +66,35 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
       if (pList.length > 1) {
         setIsMultiplePayers(true);
         const map = {};
+        let maxPaise = -1;
+        let primaryPayer = '';
         pList.forEach((p) => {
-          map[p.userId] = (Number(p.amountPaise) / 100).toString();
+          const paise = Number(p.amountPaise);
+          map[p.userId] = (paise / 100).toString();
+          if (paise > maxPaise) {
+            maxPaise = paise;
+            primaryPayer = p.userId.toString();
+          }
         });
         setPayerAmounts(map);
+        if (primaryPayer) setSinglePayerId(primaryPayer);
       } else if (pList.length === 1) {
         setIsMultiplePayers(false);
-        setSinglePayerId(pList[0].userId.toString());
+        const singleId = pList[0].userId.toString();
+        setSinglePayerId(singleId);
+        const map = {};
+        (groupMembers || []).forEach((m) => {
+          map[m.user_id] =
+            m.user_id.toString() === singleId
+              ? (Number(pList[0].amountPaise) / 100).toString()
+              : '';
+        });
+        setPayerAmounts(map);
+      } else {
+        setIsMultiplePayers(false);
+        if (groupMembers && groupMembers.length > 0) {
+          setSinglePayerId(groupMembers[0].user_id.toString());
+        }
       }
 
       // Participants
@@ -299,6 +321,116 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
     );
   };
 
+  // Payer synchronization & helper actions
+  const handleAmountChange = (val) => {
+    setAmountINR(val);
+    if (!isMultiplePayers && singlePayerId) {
+      setPayerAmounts((prev) => ({
+        ...prev,
+        [singlePayerId]: val,
+      }));
+    }
+  };
+
+  const handleSinglePayerChange = (userId) => {
+    const strId = userId.toString();
+    setSinglePayerId(strId);
+    const updated = {};
+    (groupMembers || []).forEach((m) => {
+      updated[m.user_id] = m.user_id.toString() === strId ? amountINR : '';
+    });
+    setPayerAmounts(updated);
+  };
+
+  const handlePayerModeChange = (targetMultiple) => {
+    if (targetMultiple === isMultiplePayers) return;
+
+    if (targetMultiple) {
+      // Single -> Multiple: carry over current single payer amount
+      const currentSumPaise = Object.values(payerAmounts).reduce(
+        (acc, val) => acc + inrToPaise(val),
+        0
+      );
+      const targetPaise = inrToPaise(amountINR);
+
+      if (currentSumPaise !== targetPaise && targetPaise > 0) {
+        const updated = {};
+        (groupMembers || []).forEach((m) => {
+          updated[m.user_id] =
+            m.user_id.toString() === singlePayerId.toString() ? amountINR : '';
+        });
+        setPayerAmounts(updated);
+      }
+      setIsMultiplePayers(true);
+    } else {
+      // Multiple -> Single: select highest contributor as single payer
+      let bestPayerId = singlePayerId;
+      let maxPaise = -1;
+
+      Object.entries(payerAmounts).forEach(([uid, amt]) => {
+        const p = inrToPaise(amt);
+        if (p > maxPaise && p > 0) {
+          maxPaise = p;
+          bestPayerId = uid.toString();
+        }
+      });
+
+      if (bestPayerId) {
+        setSinglePayerId(bestPayerId.toString());
+        const updated = {};
+        (groupMembers || []).forEach((m) => {
+          updated[m.user_id] =
+            m.user_id.toString() === bestPayerId.toString() ? amountINR : '';
+        });
+        setPayerAmounts(updated);
+      }
+      setIsMultiplePayers(false);
+    }
+  };
+
+  const handleSplitPayerEqually = () => {
+    if (totalPaise <= 0 || !groupMembers || groupMembers.length === 0) return;
+    const count = groupMembers.length;
+    const basePaise = Math.floor(totalPaise / count);
+    let remainder = totalPaise % count;
+
+    const updated = {};
+    groupMembers.forEach((m) => {
+      const share = basePaise + (remainder > 0 ? 1 : 0);
+      if (remainder > 0) remainder--;
+      updated[m.user_id] = (share / 100).toFixed(2);
+    });
+    setPayerAmounts(updated);
+  };
+
+  const handleSetPayerFull = (userId) => {
+    if (!amountINR || Number(amountINR) <= 0) return;
+    const targetId = userId.toString();
+    const updated = {};
+    (groupMembers || []).forEach((m) => {
+      updated[m.user_id] = m.user_id.toString() === targetId ? amountINR : '';
+    });
+    setPayerAmounts(updated);
+  };
+
+  const handleFillRemainingPayer = (userId) => {
+    if (payerDifferencePaise <= 0) return;
+    const currentPaise = inrToPaise(payerAmounts[userId] || 0);
+    const newPaise = currentPaise + payerDifferencePaise;
+    setPayerAmounts((prev) => ({
+      ...prev,
+      [userId]: (newPaise / 100).toFixed(2),
+    }));
+  };
+
+  const handleClearPayers = () => {
+    const updated = {};
+    (groupMembers || []).forEach((m) => {
+      updated[m.user_id] = '';
+    });
+    setPayerAmounts(updated);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -447,7 +579,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
                 className="form-input"
                 placeholder="0.00"
                 value={amountINR}
-                onChange={(e) => setAmountINR(e.target.value)}
+                onChange={(e) => handleAmountChange(e.target.value)}
                 required
               />
             </div>
@@ -481,69 +613,274 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
           </div>
 
           {/* Section: Who Paid? */}
-          <div style={{ marginTop: 12, marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <label className="form-label" style={{ margin: 0 }}>
+          <div style={{ marginTop: 14, marginBottom: 16 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 8,
+                marginBottom: 10,
+              }}
+            >
+              <label className="form-label" style={{ margin: 0, fontWeight: 600 }}>
                 Paid By
               </label>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={() => setIsMultiplePayers(!isMultiplePayers)}
-                style={{ fontSize: '0.8rem' }}
+
+              {/* Segmented Mode Selector */}
+              <div
+                style={{
+                  display: 'inline-flex',
+                  background: 'var(--bg-subtle)',
+                  padding: 3,
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-light)',
+                  gap: 4,
+                }}
               >
-                {isMultiplePayers ? 'Switch to Single Payer' : 'Multiple Payers'}
-              </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${!isMultiplePayers ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => handlePayerModeChange(false)}
+                  style={{
+                    border: 'none',
+                    boxShadow: !isMultiplePayers ? 'var(--shadow-sm)' : 'none',
+                    padding: '4px 12px',
+                    borderRadius: 6,
+                    fontSize: '0.8rem',
+                    fontWeight: !isMultiplePayers ? 600 : 500,
+                    cursor: 'pointer',
+                  }}
+                >
+                  👤 Single Payer
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${isMultiplePayers ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => handlePayerModeChange(true)}
+                  style={{
+                    border: 'none',
+                    boxShadow: isMultiplePayers ? 'var(--shadow-sm)' : 'none',
+                    padding: '4px 12px',
+                    borderRadius: 6,
+                    fontSize: '0.8rem',
+                    fontWeight: isMultiplePayers ? 600 : 500,
+                    cursor: 'pointer',
+                  }}
+                >
+                  👥 Multiple Payers
+                </button>
+              </div>
             </div>
 
             {!isMultiplePayers ? (
-              <select
-                className="form-select"
-                value={singlePayerId}
-                onChange={(e) => setSinglePayerId(e.target.value)}
-              >
-                {groupMembers.map((m) => (
-                  <option key={m.user_id} value={m.user_id}>
-                    {m.name} ({m.email})
-                  </option>
-                ))}
-              </select>
+              <div>
+                <select
+                  className="form-select"
+                  value={singlePayerId}
+                  onChange={(e) => handleSinglePayerChange(e.target.value)}
+                  style={{ marginBottom: 8 }}
+                >
+                  {groupMembers.map((m) => (
+                    <option key={m.user_id} value={m.user_id}>
+                      {m.name} ({m.email})
+                    </option>
+                  ))}
+                </select>
+
+                {/* Quick Member Selection Pills */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                  {groupMembers.map((m) => {
+                    const isSelected = singlePayerId.toString() === m.user_id.toString();
+                    return (
+                      <button
+                        key={m.user_id}
+                        type="button"
+                        onClick={() => handleSinglePayerChange(m.user_id)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          padding: '4px 10px',
+                          borderRadius: 20,
+                          fontSize: '0.8rem',
+                          cursor: 'pointer',
+                          border: isSelected
+                            ? '1px solid var(--primary)'
+                            : '1px solid var(--border-light)',
+                          background: isSelected ? 'var(--primary)' : 'var(--bg-card)',
+                          color: isSelected ? '#ffffff' : 'var(--text-main)',
+                          fontWeight: isSelected ? 600 : 400,
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <span style={{ fontSize: '0.75rem' }}>{isSelected ? '✓' : '👤'}</span>
+                        <span>{m.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             ) : (
-              <div style={{ background: 'var(--bg-subtle)', padding: 12, borderRadius: 'var(--radius-md)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: '0.825rem' }}>
-                  <span>Enter contribution for each payer:</span>
-                  <span
+              <div
+                style={{
+                  background: 'var(--bg-subtle)',
+                  padding: 12,
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-light)',
+                }}
+              >
+                {/* Multiple Payers Toolbar */}
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                    marginBottom: 10,
+                    paddingBottom: 8,
+                    borderBottom: '1px solid var(--border-light)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={handleSplitPayerEqually}
+                      title="Split total amount equally across all members"
+                      style={{ fontSize: '0.775rem', padding: '3px 8px' }}
+                    >
+                      ⚖️ Split Equally
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={handleClearPayers}
+                      title="Clear all contributions"
+                      style={{ fontSize: '0.775rem', padding: '3px 8px' }}
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                  <div
                     style={{
+                      fontSize: '0.825rem',
                       fontWeight: 700,
-                      color: payerDifferencePaise === 0 ? 'var(--primary-dark)' : 'var(--danger)',
+                      color:
+                        payerDifferencePaise === 0 ? 'var(--primary-dark)' : 'var(--danger)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
                     }}
                   >
                     {payerDifferencePaise === 0
                       ? '✓ Matched total'
-                      : `₹${(Math.abs(payerDifferencePaise) / 100).toFixed(2)} ${payerDifferencePaise > 0 ? 'remaining' : 'over'}`}
-                  </span>
-                </div>
-                {groupMembers.map((m) => (
-                  <div
-                    key={m.user_id}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}
-                  >
-                    <span style={{ flex: 1, fontSize: '0.9rem', fontWeight: 500 }}>{m.name}</span>
-                    <div style={{ width: 140 }}>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        className="form-input"
-                        placeholder="₹0.00"
-                        value={payerAmounts[m.user_id] || ''}
-                        onChange={(e) =>
-                          setPayerAmounts({ ...payerAmounts, [m.user_id]: e.target.value })
-                        }
-                      />
-                    </div>
+                      : `₹${(Math.abs(payerDifferencePaise) / 100).toFixed(2)} ${
+                          payerDifferencePaise > 0 ? 'remaining' : 'over'
+                        }`}
                   </div>
-                ))}
+                </div>
+
+                {/* Member Contribution Rows */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {groupMembers.map((m) => {
+                    const currentPaise = inrToPaise(payerAmounts[m.user_id] || 0);
+                    const isPaying = currentPaise > 0;
+                    return (
+                      <div
+                        key={m.user_id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 10,
+                          padding: '6px 8px',
+                          borderRadius: 'var(--radius-sm)',
+                          background: isPaying ? 'rgba(16, 185, 129, 0.06)' : 'transparent',
+                          transition: 'background 0.15s ease',
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: '0.875rem',
+                              fontWeight: 600,
+                              color: 'var(--text-main)',
+                            }}
+                          >
+                            {m.name}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '0.75rem',
+                              color: 'var(--text-muted)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {m.email}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {payerDifferencePaise > 0 && currentPaise === 0 && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => handleFillRemainingPayer(m.user_id)}
+                              title="Fill remaining amount for this member"
+                              style={{
+                                fontSize: '0.725rem',
+                                padding: '2px 6px',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              + ₹{(payerDifferencePaise / 100).toFixed(2)}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
+                            onClick={() => handleSetPayerFull(m.user_id)}
+                            title="Mark as paid full amount"
+                            style={{
+                              fontSize: '0.725rem',
+                              padding: '2px 6px',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            Paid Full
+                          </button>
+
+                          <div style={{ width: 110 }}>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              className="form-input"
+                              placeholder="₹0.00"
+                              value={payerAmounts[m.user_id] || ''}
+                              onChange={(e) =>
+                                setPayerAmounts({
+                                  ...payerAmounts,
+                                  [m.user_id]: e.target.value,
+                                })
+                              }
+                              style={{
+                                textAlign: 'right',
+                                padding: '5px 8px',
+                                fontSize: '0.85rem',
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
