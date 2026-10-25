@@ -91,7 +91,7 @@ export default function LoginPage() {
           </div>
           <h2>Welcome to SettleUp</h2>
           <p style={{ color: 'var(--text-muted)', marginTop: 6, fontSize: '0.95rem' }}>
-            Shared expenses and settlement optimization for India
+            Split expenses effortlessly, settle up with ease
           </p>
         </div>
 
