@@ -75,6 +75,8 @@ export default function RecordPaymentModal({
         paymentMethod,
         referenceId: referenceId.trim() || undefined,
         notes: notes.trim() || undefined,
+        status: 'confirmed',
+        settleImmediately: true,
       });
       onClose();
     } catch (err) {
@@ -180,7 +182,7 @@ export default function RecordPaymentModal({
           </div>
 
           <div className="alert alert-info" style={{ fontSize: '0.8rem', margin: 0 }}>
-            Proposing a settlement marks it as <strong>Pending</strong>. The recipient must confirm receipt before it affects group balances.
+            Recording this payment will mark it as <strong>Settled</strong> and immediately recalculate all group balances in real time.
           </div>
         </div>
 
