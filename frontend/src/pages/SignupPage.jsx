@@ -27,6 +27,7 @@ export default function SignupPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [touched, setTouched] = useState({});
   const [serverError, setServerError] = useState('');
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const { signup } = useAuth();
@@ -42,11 +43,20 @@ export default function SignupPage() {
   const doPasswordsMatch = password.length > 0 && confirmPassword === password;
 
   const errors = {
-    name: touched.name && !isNameValid ? 'Please enter your full name (at least 2 characters)' : '',
-    email: touched.email && !isEmailValid ? 'Please enter a valid email address' : '',
-    password: touched.password && !isPasswordValid ? 'Password must satisfy all security rules below' : '',
+    name:
+      (touched.name || submitAttempted) && !isNameValid
+        ? 'Please enter your full name (at least 2 characters)'
+        : '',
+    email:
+      (touched.email || submitAttempted) && !isEmailValid
+        ? 'Please enter a valid email address'
+        : '',
+    password:
+      (touched.password || submitAttempted) && !isPasswordValid
+        ? 'Password must satisfy all security rules below'
+        : '',
     confirmPassword:
-      touched.confirmPassword && !doPasswordsMatch
+      (touched.confirmPassword || submitAttempted) && !doPasswordsMatch
         ? confirmPassword.length === 0
           ? 'Please confirm your password'
           : 'Passwords do not match'
@@ -55,6 +65,30 @@ export default function SignupPage() {
 
   const isFormValid = isNameValid && isEmailValid && isPasswordValid && doPasswordsMatch;
 
+  // Concrete list of what is blocking submission (shown when the user clicks the button)
+  const validationIssues = [];
+  if (!isNameValid) {
+    validationIssues.push('Full name must be at least 2 characters');
+  }
+  if (!isEmailValid) {
+    validationIssues.push('Enter a valid email address (e.g. name@example.com)');
+  }
+  if (!isPasswordValid) {
+    if (password.length === 0) {
+      validationIssues.push('Password is required');
+    } else {
+      const unmetRules = strength.rules.filter((r) => !r.met).map((r) => r.label);
+      validationIssues.push(`Password still needs: ${unmetRules.join(', ')}`);
+    }
+  }
+  if (!doPasswordsMatch) {
+    validationIssues.push(
+      confirmPassword.length === 0 ? 'Confirm your password' : 'Passwords do not match'
+    );
+  }
+
+  const showValidationSummary = submitAttempted && !isFormValid && validationIssues.length > 0;
+
   const handleBlur = (field) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
   };
@@ -62,9 +96,11 @@ export default function SignupPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setTouched({ name: true, email: true, password: true, confirmPassword: true });
+    setSubmitAttempted(true);
     setServerError('');
 
     if (!isFormValid) {
+      // Never silently ignore: validationIssues are rendered as a summary above the form
       return;
     }
 
@@ -124,6 +160,23 @@ export default function SignupPage() {
             <div className="alert alert-danger" style={{ marginBottom: 20 }}>
               <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
               <span>{serverError}</span>
+            </div>
+          )}
+
+          {/* Submit-time validation summary: explains exactly what blocks "Get Started" */}
+          {showValidationSummary && (
+            <div className="alert alert-danger" style={{ marginBottom: 20 }}>
+              <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <strong>Please fix the following to continue:</strong>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                  {validationIssues.map((issue) => (
+                    <li key={issue} style={{ fontSize: '0.85rem' }}>
+                      {issue}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           )}
 
@@ -368,8 +421,8 @@ export default function SignupPage() {
                           alignItems: 'center',
                           gap: 7,
                           fontSize: '0.78rem',
-                          color: rule.met ? '#059669' : '#64748b',
-                          fontWeight: rule.met ? 600 : 400,
+                          color: rule.met ? '#059669' : '#dc2626',
+                          fontWeight: rule.met ? 600 : 500,
                         }}
                       >
                         {rule.met ? (
@@ -380,7 +433,7 @@ export default function SignupPage() {
                               width: 8,
                               height: 8,
                               borderRadius: '50%',
-                              background: '#cbd5e1',
+                              background: '#fca5a5',
                               margin: '0 2px',
                               flexShrink: 0,
                             }}
@@ -497,17 +550,22 @@ export default function SignupPage() {
               )}
             </div>
 
-            {/* Submit Button */}
+            {/* Submit Button — stays clickable so a click always produces feedback */}
             <button
               type="submit"
               className="btn btn-primary"
+              // Keep focus in the field on mousedown: blurring would render the
+              // validation line above and shift this button out from under the
+              // cursor between mousedown and mouseup, swallowing the first click.
+              onMouseDown={(e) => e.preventDefault()}
               style={{
                 width: '100%',
                 marginTop: 4,
-                opacity: isFormValid ? 1 : 0.65,
-                cursor: isFormValid ? 'pointer' : 'not-allowed',
+                opacity: loading ? 0.7 : 1,
+                cursor: loading ? 'wait' : 'pointer',
               }}
-              disabled={!isFormValid || loading}
+              disabled={loading}
+              aria-disabled={loading}
             >
               <span>{loading ? 'Creating Account...' : 'Get Started'}</span>
               <ArrowRight size={16} />
