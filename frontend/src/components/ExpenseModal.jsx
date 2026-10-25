@@ -888,14 +888,12 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
           {/* Section: Split Method Selector */}
           <div style={{ marginTop: 16 }}>
             <label className="form-label">Split Method</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 14 }}>
               {[
                 { id: 'equal', label: '1. Equal' },
                 { id: 'exact', label: '2. Exact' },
                 { id: 'percentage', label: '3. Percentage' },
-                { id: 'shares', label: '4. Shares' },
-                { id: 'adjustment', label: '5. Adjustment' },
-                { id: 'itemized', label: '6. Itemized' },
+                { id: 'itemized', label: '4. Itemized' },
               ].map((m) => (
                 <button
                   type="button"
@@ -1031,69 +1029,6 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
                         }
                       />
                       <span>%</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {splitType === 'shares' && (
-              <div style={{ background: 'var(--bg-subtle)', padding: 14, borderRadius: 'var(--radius-md)' }}>
-                {groupMembers.map((m) => (
-                  <div
-                    key={m.user_id}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}
-                  >
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, fontSize: '0.9rem' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedParticipants.includes(m.user_id)}
-                        onChange={() => toggleParticipant(m.user_id)}
-                      />
-                      <span>{m.name}</span>
-                    </label>
-                    <div style={{ width: 140, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <input
-                        type="number"
-                        step="1"
-                        min="1"
-                        className="form-input"
-                        placeholder="1"
-                        disabled={!selectedParticipants.includes(m.user_id)}
-                        value={shares[m.user_id] || ''}
-                        onChange={(e) =>
-                          setShares({ ...shares, [m.user_id]: e.target.value })
-                        }
-                      />
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>shares</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {splitType === 'adjustment' && (
-              <div style={{ background: 'var(--bg-subtle)', padding: 14, borderRadius: 'var(--radius-md)' }}>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 8 }}>
-                  Equal split base + positive or negative adjustment:
-                </p>
-                {groupMembers.map((m) => (
-                  <div
-                    key={m.user_id}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}
-                  >
-                    <span style={{ flex: 1, fontSize: '0.9rem', fontWeight: 500 }}>{m.name}</span>
-                    <div style={{ width: 140 }}>
-                      <input
-                        type="number"
-                        step="0.01"
-                        className="form-input"
-                        placeholder="+/- ₹0.00"
-                        value={adjustments[m.user_id] || ''}
-                        onChange={(e) =>
-                          setAdjustments({ ...adjustments, [m.user_id]: e.target.value })
-                        }
-                      />
                     </div>
                   </div>
                 ))}
