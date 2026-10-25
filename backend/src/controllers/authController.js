@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { query } = require('../db');
 const { isValidUpiId } = require('../utils/upi');
+const { validatePassword } = require('../utils/password');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'settleup_super_secret_jwt_key_2026_dev_india';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
@@ -28,8 +29,9 @@ async function signup(req, res, next) {
       return res.status(400).json({ error: 'Please enter a valid email address' });
     }
 
-    if (!password || password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.isValid) {
+      return res.status(400).json({ error: passwordValidation.error });
     }
 
     if (upi_id && upi_id.trim() && !isValidUpiId(upi_id.trim())) {
@@ -83,13 +85,13 @@ async function login(req, res, next) {
     );
 
     if (result.rowCount === 0) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'No account found with this email address. Please check your email or sign up.' });
     }
 
     const user = result.rows[0];
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid email or password. Please try again.' });
     }
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
@@ -157,8 +159,9 @@ async function changePassword(req, res, next) {
       return res.status(400).json({ error: 'Current and new password are required' });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'New password must be at least 6 characters long' });
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.isValid) {
+      return res.status(400).json({ error: passwordValidation.error });
     }
 
     const result = await query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);

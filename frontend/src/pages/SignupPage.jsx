@@ -1,37 +1,70 @@
 // frontend/src/pages/SignupPage.jsx
-// User registration page
+// User registration page with real-time password strength and validation
 
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ArrowRightLeft, ArrowRight, AlertCircle } from 'lucide-react';
+import {
+  ArrowRightLeft,
+  ArrowRight,
+  AlertCircle,
+  Check,
+  X,
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  User,
+} from 'lucide-react';
+import { evaluatePasswordStrength } from '../utils/passwordStrength';
 
 export default function SignupPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [touched, setTouched] = useState({});
+  const [serverError, setServerError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const { signup } = useAuth();
   const navigate = useNavigate();
 
+  // Evaluate password strength in real time
+  const strength = evaluatePasswordStrength(password);
+
+  // Field validation checks
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim());
+  const isNameValid = (name || '').trim().length >= 2;
+  const isPasswordValid = strength.isStrong;
+  const doPasswordsMatch = password.length > 0 && confirmPassword === password;
+
+  const errors = {
+    name: touched.name && !isNameValid ? 'Please enter your full name (at least 2 characters)' : '',
+    email: touched.email && !isEmailValid ? 'Please enter a valid email address' : '',
+    password: touched.password && !isPasswordValid ? 'Password must satisfy all security rules below' : '',
+    confirmPassword:
+      touched.confirmPassword && !doPasswordsMatch
+        ? confirmPassword.length === 0
+          ? 'Please confirm your password'
+          : 'Passwords do not match'
+        : '',
+  };
+
+  const isFormValid = isNameValid && isEmailValid && isPasswordValid && doPasswordsMatch;
+
+  const handleBlur = (field) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    setTouched({ name: true, email: true, password: true, confirmPassword: true });
+    setServerError('');
 
-    if (!name.trim()) {
-      setError('Please enter your full name');
-      return;
-    }
-
-    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError('Please enter a valid email address');
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long');
+    if (!isFormValid) {
       return;
     }
 
@@ -44,7 +77,7 @@ export default function SignupPage() {
       });
       navigate('/dashboard');
     } catch (err) {
-      setError(err.message || 'Registration failed. Please try again.');
+      setServerError(err.message || 'Registration failed. Please check your details and try again.');
     } finally {
       setLoading(false);
     }
@@ -53,15 +86,16 @@ export default function SignupPage() {
   return (
     <div
       style={{
-        minHeight: '80vh',
+        minHeight: '85vh',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '24px 16px',
+        padding: '32px 16px',
       }}
     >
-      <div style={{ maxWidth: 440, width: '100%' }}>
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+      <div style={{ maxWidth: 460, width: '100%' }}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div
             style={{
               width: 52,
@@ -72,74 +106,408 @@ export default function SignupPage() {
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              marginBottom: 16,
+              marginBottom: 14,
               boxShadow: 'var(--shadow-md)',
             }}
           >
             <ArrowRightLeft size={28} />
           </div>
           <h2>Create Your Account</h2>
-          <p style={{ color: 'var(--text-muted)', marginTop: 6, fontSize: '0.95rem' }}>
-            Join SettleUp to manage flat and travel group expenses
+          <p style={{ color: 'var(--text-muted)', marginTop: 6, fontSize: '0.925rem' }}>
+            Split expenses effortlessly, settle up with ease
           </p>
         </div>
 
-        <div className="card" style={{ padding: 28 }}>
-          {error && (
-            <div className="alert alert-danger">
+        {/* Card */}
+        <div className="card" style={{ padding: 28, boxShadow: 'var(--shadow-md)' }}>
+          {serverError && (
+            <div className="alert alert-danger" style={{ marginBottom: 20 }}>
               <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
-              <span>{error}</span>
+              <span>{serverError}</span>
             </div>
           )}
 
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label className="form-label">Full Name *</label>
-              <input
-                type="text"
-                name="name"
-                autoComplete="name"
-                className="form-input"
-                placeholder="e.g. Aarav Sharma"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
+          <form onSubmit={handleSubmit} noValidate>
+            {/* Full Name */}
+            <div className="form-group" style={{ marginBottom: 18 }}>
+              <label className="form-label" htmlFor="name">
+                Full Name *
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  name="name"
+                  id="name"
+                  autoComplete="name"
+                  className={`form-input ${errors.name ? 'is-invalid' : ''}`}
+                  placeholder="e.g. Aarav Sharma"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onBlur={() => handleBlur('name')}
+                  style={{
+                    paddingLeft: 38,
+                    borderColor: errors.name ? 'var(--danger, #ef4444)' : undefined,
+                  }}
+                  required
+                />
+                <User
+                  size={16}
+                  style={{
+                    position: 'absolute',
+                    left: 12,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--text-muted)',
+                  }}
+                />
+              </div>
+              {errors.name && (
+                <div
+                  style={{
+                    color: 'var(--danger, #ef4444)',
+                    fontSize: '0.8rem',
+                    marginTop: 5,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <AlertCircle size={13} />
+                  <span>{errors.name}</span>
+                </div>
+              )}
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Email Address *</label>
-              <input
-                type="email"
-                name="email"
-                autoComplete="email"
-                className="form-input"
-                placeholder="name@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+            {/* Email Address */}
+            <div className="form-group" style={{ marginBottom: 18 }}>
+              <label className="form-label" htmlFor="email">
+                Email Address *
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="email"
+                  name="email"
+                  id="email"
+                  autoComplete="email"
+                  className={`form-input ${errors.email ? 'is-invalid' : ''}`}
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onBlur={() => handleBlur('email')}
+                  style={{
+                    paddingLeft: 38,
+                    borderColor: errors.email ? 'var(--danger, #ef4444)' : undefined,
+                  }}
+                  required
+                />
+                <Mail
+                  size={16}
+                  style={{
+                    position: 'absolute',
+                    left: 12,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--text-muted)',
+                  }}
+                />
+              </div>
+              {errors.email && (
+                <div
+                  style={{
+                    color: 'var(--danger, #ef4444)',
+                    fontSize: '0.8rem',
+                    marginTop: 5,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <AlertCircle size={13} />
+                  <span>{errors.email}</span>
+                </div>
+              )}
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Password * (min 6 characters)</label>
-              <input
-                type="password"
-                name="password"
-                autoComplete="new-password"
-                className="form-input"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+            {/* Password */}
+            <div className="form-group" style={{ marginBottom: 14 }}>
+              <label className="form-label" htmlFor="password">
+                Password *
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  id="password"
+                  autoComplete="new-password"
+                  className={`form-input ${errors.password ? 'is-invalid' : ''}`}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onBlur={() => handleBlur('password')}
+                  style={{
+                    paddingLeft: 38,
+                    paddingRight: 40,
+                    borderColor: errors.password ? 'var(--danger, #ef4444)' : undefined,
+                  }}
+                  required
+                />
+                <Lock
+                  size={16}
+                  style={{
+                    position: 'absolute',
+                    left: 12,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--text-muted)',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: 12,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--text-muted)',
+                    padding: 0,
+                    display: 'flex',
+                  }}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+
+              {/* Real-time Password Strength Meter */}
+              {password.length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 6,
+                    }}
+                  >
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      Password Strength:
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        color: strength.color,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      {strength.label}
+                    </span>
+                  </div>
+
+                  {/* Segmented Strength Bar */}
+                  <div
+                    style={{
+                      height: 6,
+                      background: '#e2e8f0',
+                      borderRadius: 3,
+                      overflow: 'hidden',
+                      position: 'relative',
+                      display: 'flex',
+                      gap: 3,
+                    }}
+                  >
+                    <div
+                      style={{
+                        flex: 1,
+                        background: strength.score >= 25 ? strength.color : '#e2e8f0',
+                        borderRadius: 2,
+                        transition: 'background 0.3s ease',
+                      }}
+                    />
+                    <div
+                      style={{
+                        flex: 1,
+                        background: strength.score >= 65 ? strength.color : '#e2e8f0',
+                        borderRadius: 2,
+                        transition: 'background 0.3s ease',
+                      }}
+                    />
+                    <div
+                      style={{
+                        flex: 1,
+                        background: strength.score >= 100 ? strength.color : '#e2e8f0',
+                        borderRadius: 2,
+                        transition: 'background 0.3s ease',
+                      }}
+                    />
+                  </div>
+
+                  {/* Real-time Rules Checklist */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr',
+                      gap: 4,
+                      marginTop: 10,
+                      background: 'var(--bg-subtle, #f8fafc)',
+                      padding: 10,
+                      borderRadius: 'var(--radius-sm, 6px)',
+                      border: '1px solid var(--border-light, #e2e8f0)',
+                    }}
+                  >
+                    {strength.rules.map((rule) => (
+                      <div
+                        key={rule.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 7,
+                          fontSize: '0.78rem',
+                          color: rule.met ? '#059669' : '#64748b',
+                          fontWeight: rule.met ? 600 : 400,
+                        }}
+                      >
+                        {rule.met ? (
+                          <Check size={13} style={{ color: '#10b981', flexShrink: 0 }} />
+                        ) : (
+                          <div
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              background: '#cbd5e1',
+                              margin: '0 2px',
+                              flexShrink: 0,
+                            }}
+                          />
+                        )}
+                        <span>{rule.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {errors.password && (
+                <div
+                  style={{
+                    color: 'var(--danger, #ef4444)',
+                    fontSize: '0.8rem',
+                    marginTop: 6,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <AlertCircle size={13} />
+                  <span>{errors.password}</span>
+                </div>
+              )}
             </div>
 
+            {/* Confirm Password */}
+            <div className="form-group" style={{ marginBottom: 22 }}>
+              <label className="form-label" htmlFor="confirmPassword">
+                Confirm Password *
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  name="confirmPassword"
+                  id="confirmPassword"
+                  autoComplete="new-password"
+                  className={`form-input ${errors.confirmPassword ? 'is-invalid' : ''}`}
+                  placeholder="••••••••"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onBlur={() => handleBlur('confirmPassword')}
+                  style={{
+                    paddingLeft: 38,
+                    paddingRight: 40,
+                    borderColor: errors.confirmPassword ? 'var(--danger, #ef4444)' : undefined,
+                  }}
+                  required
+                />
+                <Lock
+                  size={16}
+                  style={{
+                    position: 'absolute',
+                    left: 12,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--text-muted)',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: 12,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--text-muted)',
+                    padding: 0,
+                    display: 'flex',
+                  }}
+                  title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+
+              {errors.confirmPassword && (
+                <div
+                  style={{
+                    color: 'var(--danger, #ef4444)',
+                    fontSize: '0.8rem',
+                    marginTop: 5,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <AlertCircle size={13} />
+                  <span>{errors.confirmPassword}</span>
+                </div>
+              )}
+
+              {touched.confirmPassword && doPasswordsMatch && (
+                <div
+                  style={{
+                    color: '#059669',
+                    fontSize: '0.8rem',
+                    marginTop: 5,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <Check size={13} />
+                  <span>Passwords match!</span>
+                </div>
+              )}
+            </div>
+
+            {/* Submit Button */}
             <button
               type="submit"
               className="btn btn-primary"
-              style={{ width: '100%', marginTop: 8 }}
-              disabled={loading}
+              style={{
+                width: '100%',
+                marginTop: 4,
+                opacity: isFormValid ? 1 : 0.65,
+                cursor: isFormValid ? 'pointer' : 'not-allowed',
+              }}
+              disabled={!isFormValid || loading}
             >
               <span>{loading ? 'Creating Account...' : 'Get Started'}</span>
               <ArrowRight size={16} />
@@ -147,9 +515,10 @@ export default function SignupPage() {
           </form>
         </div>
 
-        <p style={{ textAlign: 'center', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+        {/* Footer */}
+        <p style={{ textAlign: 'center', fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: 20 }}>
           Already have an account?{' '}
-          <Link to="/login" style={{ fontWeight: 600 }}>
+          <Link to="/login" style={{ fontWeight: 600, color: 'var(--primary)' }}>
             Sign in
           </Link>
         </p>

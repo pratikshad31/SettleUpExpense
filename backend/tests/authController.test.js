@@ -43,16 +43,24 @@ describe('Auth Controller (src/controllers/authController.js)', () => {
       assert.match(res.body.error, /valid email/);
     });
 
-    it('should reject password with less than 6 characters', async () => {
+    it('should reject password with less than 8 characters', async () => {
       const req = { body: { name: 'Test', email: 'test1@ex.com', password: '123' } };
       const res = createMockRes();
       await signup(req, res, () => {});
       assert.strictEqual(res.statusCode, 400);
-      assert.match(res.body.error, /at least 6 characters/);
+      assert.match(res.body.error, /at least 8 characters/);
+    });
+
+    it('should reject weak password missing special character or uppercase', async () => {
+      const req = { body: { name: 'Test', email: 'test_weak@ex.com', password: 'password123' } };
+      const res = createMockRes();
+      await signup(req, res, () => {});
+      assert.strictEqual(res.statusCode, 400);
+      assert.ok(res.body.error);
     });
 
     it('should reject invalid UPI ID format', async () => {
-      const req = { body: { name: 'Test', email: 'test2@ex.com', password: 'password123', upi_id: 'invalid@@vpa' } };
+      const req = { body: { name: 'Test', email: 'test2@ex.com', password: 'SecurePassword123!', upi_id: 'invalid@@vpa' } };
       const res = createMockRes();
       await signup(req, res, () => {});
       assert.strictEqual(res.statusCode, 400);
@@ -61,7 +69,7 @@ describe('Auth Controller (src/controllers/authController.js)', () => {
 
     it('should register valid user with token and exclude password_hash', async () => {
       const uniqueEmail = `user_${Date.now()}@example.com`;
-      const req = { body: { name: 'New Dev', email: uniqueEmail, password: 'securePassword123', upi_id: 'dev@okhdfcbank' } };
+      const req = { body: { name: 'New Dev', email: uniqueEmail, password: 'SecurePassword123!', upi_id: 'dev@okhdfcbank' } };
       const res = createMockRes();
       await signup(req, res, () => {});
       assert.strictEqual(res.statusCode, 201);
@@ -73,7 +81,7 @@ describe('Auth Controller (src/controllers/authController.js)', () => {
 
   describe('login(req, res, next)', () => {
     const userEmail = `login_${Date.now()}@example.com`;
-    const userPassword = 'myLoginPass123';
+    const userPassword = 'MyLoginPass123!';
 
     before(async () => {
       const res = createMockRes();
@@ -120,7 +128,7 @@ describe('Auth Controller (src/controllers/authController.js)', () => {
     before(async () => {
       const uniqueEmail = `profile_${Date.now()}@example.com`;
       const res = createMockRes();
-      await signup({ body: { name: 'Initial Name', email: uniqueEmail, password: 'password123' } }, res, () => {});
+      await signup({ body: { name: 'Initial Name', email: uniqueEmail, password: 'SecurePassword123!' } }, res, () => {});
       testUser = res.body.user;
     });
 
@@ -144,7 +152,7 @@ describe('Auth Controller (src/controllers/authController.js)', () => {
 
   describe('changePassword(req, res, next)', () => {
     let testUser;
-    const initialPass = 'initialPassword123';
+    const initialPass = 'InitialPassword123!';
     before(async () => {
       const uniqueEmail = `changepass_${Date.now()}@example.com`;
       const res = createMockRes();
@@ -153,15 +161,23 @@ describe('Auth Controller (src/controllers/authController.js)', () => {
     });
 
     it('should reject incorrect current password', async () => {
-      const req = { user: testUser, body: { currentPassword: 'wrongCurrentPassword', newPassword: 'newPassword123' } };
+      const req = { user: testUser, body: { currentPassword: 'wrongCurrentPassword', newPassword: 'BrandNewPassword123!' } };
       const res = createMockRes();
       await changePassword(req, res, () => {});
       assert.strictEqual(res.statusCode, 400);
       assert.match(res.body.error, /Current password is incorrect/);
     });
 
+    it('should reject weak new password', async () => {
+      const req = { user: testUser, body: { currentPassword: initialPass, newPassword: '123' } };
+      const res = createMockRes();
+      await changePassword(req, res, () => {});
+      assert.strictEqual(res.statusCode, 400);
+      assert.match(res.body.error, /at least 8 characters/);
+    });
+
     it('should change password successfully', async () => {
-      const req = { user: testUser, body: { currentPassword: initialPass, newPassword: 'brandNewPassword123' } };
+      const req = { user: testUser, body: { currentPassword: initialPass, newPassword: 'BrandNewPassword123!' } };
       const res = createMockRes();
       await changePassword(req, res, () => {});
       assert.strictEqual(res.statusCode, 200);

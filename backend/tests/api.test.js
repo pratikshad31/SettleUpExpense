@@ -50,7 +50,7 @@ describe('API Integration Test Suite', () => {
         .send({
           name: 'Karan Mehra',
           email: 'karan@example.com',
-          password: 'secretPassword123',
+          password: 'SecretPassword123!',
           upi_id: 'karan@okaxis',
         });
 
@@ -66,7 +66,7 @@ describe('API Integration Test Suite', () => {
         .send({
           name: 'Another Aarav',
           email: 'aarav@example.com',
-          password: 'password123',
+          password: 'SecretPassword123!',
         });
 
       assert.strictEqual(res.status, 409);

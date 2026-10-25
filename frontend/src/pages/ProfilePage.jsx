@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import Toast from '../components/Toast';
 import { User, Shield, CreditCard, Check, AlertCircle } from 'lucide-react';
+import { evaluatePasswordStrength } from '../utils/passwordStrength';
 
 export default function ProfilePage() {
   const { user, updateProfile } = useAuth();
@@ -42,12 +43,19 @@ export default function ProfilePage() {
     }
   };
 
+  const passwordStrength = evaluatePasswordStrength(newPassword);
+
   const handleChangePassword = async (e) => {
     e.preventDefault();
     setPasswordError('');
 
-    if (newPassword.length < 6) {
-      setPasswordError('New password must be at least 6 characters long');
+    if (!currentPassword) {
+      setPasswordError('Please enter your current password');
+      return;
+    }
+
+    if (!passwordStrength.isStrong) {
+      setPasswordError('New password must satisfy all strong password requirements (8+ chars, uppercase, lowercase, number, special char)');
       return;
     }
 
@@ -176,11 +184,35 @@ export default function ProfilePage() {
               <input
                 type="password"
                 className="form-input"
-                placeholder="min 6 characters"
+                placeholder="min 8 chars, 1 upper, 1 lower, 1 num, 1 special"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 required
               />
+              {newPassword.length > 0 && (
+                <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ flex: 1, height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${passwordStrength.score}%`,
+                        height: '100%',
+                        background: passwordStrength.color,
+                        transition: 'all 0.3s ease',
+                      }}
+                    />
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      color: passwordStrength.color,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {passwordStrength.label}
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="form-group">
@@ -193,6 +225,17 @@ export default function ProfilePage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
               />
+              {confirmPassword.length > 0 && (
+                <div style={{ marginTop: 6, fontSize: '0.78rem' }}>
+                  {confirmPassword === newPassword ? (
+                    <span style={{ color: '#059669', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Check size={12} /> Passwords match
+                    </span>
+                  ) : (
+                    <span style={{ color: 'var(--danger, #ef4444)' }}>Passwords do not match</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
