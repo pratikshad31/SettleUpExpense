@@ -3,6 +3,7 @@
 
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert');
+const bcrypt = require('bcryptjs');
 const { signup, login, me, updateProfile, changePassword } = require('../src/controllers/authController');
 const { pool, query } = require('../src/db');
 
@@ -102,6 +103,31 @@ describe('Auth Controller (src/controllers/authController.js)', () => {
       await login(req, res, () => {});
       assert.strictEqual(res.statusCode, 401);
       assert.match(res.body.error, /Invalid email or password/);
+    });
+
+    it('returns the same 401 and compares a dummy hash for an unknown email', async () => {
+      const originalCompare = bcrypt.compare;
+      const comparedHashes = [];
+      bcrypt.compare = async (password, hash, ...args) => {
+        comparedHashes.push(hash);
+        return originalCompare.call(bcrypt, password, hash, ...args);
+      };
+
+      try {
+        const unknownRes = createMockRes();
+        await login({ body: { email: `missing_${Date.now()}@example.com`, password: 'wrongPassword' } }, unknownRes, () => {});
+
+        const wrongPasswordRes = createMockRes();
+        await login({ body: { email: userEmail, password: 'wrongPassword' } }, wrongPasswordRes, () => {});
+
+        assert.strictEqual(unknownRes.statusCode, 401);
+        assert.strictEqual(wrongPasswordRes.statusCode, 401);
+        assert.strictEqual(unknownRes.body.error, wrongPasswordRes.body.error);
+        assert.strictEqual(comparedHashes.length, 2);
+        assert.notStrictEqual(comparedHashes[0], comparedHashes[1]);
+      } finally {
+        bcrypt.compare = originalCompare;
+      }
     });
 
     it('should login successfully with correct credentials', async () => {

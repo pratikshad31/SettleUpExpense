@@ -87,6 +87,33 @@ describe('Auth Middleware (src/middleware/auth.js)', () => {
     assert.strictEqual(nextCalled, false);
   });
 
+  it('should reject an alg:none token', async () => {
+    const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
+    const payload = Buffer.from(JSON.stringify({
+      userId: testUserId,
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    })).toString('base64url');
+    const token = `${header}.${payload}.`;
+    const res = createMockRes();
+
+    await authenticate({ headers: { authorization: `Bearer ${token}` } }, res, () => {});
+
+    assert.strictEqual(res.statusCode, 401);
+    assert.match(res.body.error, /Invalid or expired/i);
+  });
+
+  it('should reject a token with a tampered signature', async () => {
+    const [header, payload, signature] = validToken.split('.');
+    const replacement = signature[0] === 'a' ? 'b' : 'a';
+    const tamperedToken = `${header}.${payload}.${replacement}${signature.slice(1)}`;
+    const res = createMockRes();
+
+    await authenticate({ headers: { authorization: `Bearer ${tamperedToken}` } }, res, () => {});
+
+    assert.strictEqual(res.statusCode, 401);
+    assert.match(res.body.error, /Invalid or expired/i);
+  });
+
   it('should return 401 if token payload has no userId', async () => {
     const emptyPayloadToken = jwt.sign({ role: 'admin' }, secret, { expiresIn: '1h' });
     const req = { headers: { authorization: `Bearer ${emptyPayloadToken}` } };

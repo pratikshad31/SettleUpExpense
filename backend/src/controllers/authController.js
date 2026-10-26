@@ -9,6 +9,8 @@ const { validatePassword } = require('../utils/password');
 const { JWT_SECRET } = require('../config');
 
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync('SettleUpExpense dummy login password', 10);
 
 /**
  * Sign up a new user
@@ -24,8 +26,7 @@ async function signup(req, res, next) {
       return res.status(400).json({ error: 'Email is required' });
     }
     const cleanEmail = email.trim().toLowerCase();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(cleanEmail)) {
+    if (!EMAIL_REGEX.test(cleanEmail)) {
       return res.status(400).json({ error: 'Please enter a valid email address' });
     }
 
@@ -74,23 +75,23 @@ async function login(req, res, next) {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
+    if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
     const cleanEmail = email.trim().toLowerCase();
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+
     const result = await query(
       'SELECT id, name, email, password_hash, upi_id, created_at FROM users WHERE email = $1',
       [cleanEmail]
     );
 
-    if (result.rowCount === 0) {
-      return res.status(401).json({ error: 'No account found with this email address. Please check your email or sign up.' });
-    }
-
     const user = result.rows[0];
-    const isMatch = await bcrypt.compare(password, user.password_hash);
-    if (!isMatch) {
+    const isMatch = await bcrypt.compare(password, user ? user.password_hash : DUMMY_PASSWORD_HASH);
+    if (!user || !isMatch) {
       return res.status(401).json({ error: 'Invalid email or password. Please try again.' });
     }
 
