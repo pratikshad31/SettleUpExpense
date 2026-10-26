@@ -4,6 +4,7 @@ import process from 'node:process';
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
+  workers: 1,
   retries: process.env.CI ? 2 : 0,
   reporter: 'list',
   use: {
