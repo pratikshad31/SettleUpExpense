@@ -4,6 +4,7 @@
 const { query, withTransaction } = require('../db');
 const { toPaise } = require('../utils/money');
 const { calculateSplit } = require('../utils/splits');
+const { parsePaise, parseNonNegativePaise } = require('../utils/validators');
 
 function validationError(message) {
   const err = new Error(message);
@@ -23,9 +24,14 @@ function validatePayers(payers, totalPaise, groupMemberIds) {
   const seenPayers = new Set();
   const normalizedPayers = [];
 
-  for (const p of payers) {
+  for (const [index, p] of payers.entries()) {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) {
+      throw validationError(`payers[${index}]: must be an object. Expected a payer with an integer paise amount.`);
+    }
     const userId = Number(p.userId);
-    const amountPaise = Number(p.amountPaise !== undefined ? p.amountPaise : toPaise(p.amountINR));
+    const amountPaise = p.amountPaise !== undefined
+      ? parsePaise(p.amountPaise, `payers[${index}].amountPaise`)
+      : toPaise(p.amountINR, `payers[${index}].amountINR`);
 
     if (isNaN(userId) || isNaN(amountPaise) || amountPaise <= 0) {
       throw validationError(`Invalid contribution for payer user #${p.userId}`);
@@ -39,6 +45,7 @@ function validatePayers(payers, totalPaise, groupMemberIds) {
 
     seenPayers.add(userId);
     sumPayers += amountPaise;
+    parseNonNegativePaise(sumPayers, 'payer amount sum');
     normalizedPayers.push({ userId, amountPaise });
   }
 
@@ -50,6 +57,21 @@ function validatePayers(payers, totalPaise, groupMemberIds) {
   }
 
   return normalizedPayers;
+}
+
+function normalizeItems(items) {
+  return items.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw validationError(`items[${index}]: must be an object. Expected an item with an integer paise amount.`);
+    }
+    return {
+      name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : 'Item',
+      amountPaise: item.amountPaise !== undefined
+        ? parsePaise(item.amountPaise, `items[${index}].amountPaise`)
+        : toPaise(item.amountINR, `items[${index}].amountINR`),
+      assignedUserIds: Array.isArray(item.assignedUserIds) ? item.assignedUserIds.map(Number) : item.assignedUserIds,
+    };
+  });
 }
 
 /**
@@ -76,10 +98,9 @@ async function createExpense(req, res, next) {
       return res.status(400).json({ error: 'Expense description is required' });
     }
 
-    const totalPaise = rawAmountPaise !== undefined ? Number(rawAmountPaise) : toPaise(amountINR);
-    if (isNaN(totalPaise) || totalPaise <= 0) {
-      return res.status(400).json({ error: 'Expense total amount must be greater than 0' });
-    }
+    const totalPaise = rawAmountPaise !== undefined
+      ? parsePaise(rawAmountPaise, 'amountPaise')
+      : toPaise(amountINR, 'amountINR');
 
     // Fetch active group members
     const membersRes = await query(
@@ -107,15 +128,13 @@ async function createExpense(req, res, next) {
           return res.status(400).json({ error: 'At least one item is required for itemized expense' });
         }
 
-        processedItems = items.map((it) => ({
-          name: (it.name || 'Item').trim(),
-          amountPaise: it.amountPaise !== undefined ? Number(it.amountPaise) : toPaise(it.amountINR),
-          assignedUserIds: (it.assignedUserIds || []).map(Number),
-        }));
+        processedItems = normalizeItems(items);
 
         calculatedParticipants = calculateSplit('itemized', totalPaise, {
           items: processedItems,
-          sharedTaxPaise: req.body.sharedTaxPaise || 0,
+          sharedTaxPaise: req.body.sharedTaxPaise === undefined
+            ? 0
+            : parseNonNegativePaise(req.body.sharedTaxPaise, 'sharedTaxPaise'),
         }, [...activeMemberIds]);
       } else {
         calculatedParticipants = calculateSplit(
@@ -233,6 +252,9 @@ async function createExpense(req, res, next) {
       expense: savedExpense,
     });
   } catch (err) {
+    if (err.status === 400) {
+      return res.status(400).json({ error: err.message });
+    }
     next(err);
   }
 }
@@ -369,10 +391,9 @@ async function updateExpense(req, res, next) {
       return res.status(400).json({ error: 'Cannot update a voided expense' });
     }
 
-    const totalPaise = rawAmountPaise !== undefined ? Number(rawAmountPaise) : toPaise(amountINR);
-    if (isNaN(totalPaise) || totalPaise <= 0) {
-      return res.status(400).json({ error: 'Expense amount must be greater than 0' });
-    }
+    const totalPaise = rawAmountPaise !== undefined
+      ? parsePaise(rawAmountPaise, 'amountPaise')
+      : toPaise(amountINR, 'amountINR');
 
     const membersRes = await query(
       `SELECT user_id FROM group_members WHERE group_id = $1 AND status = 'active'`,
@@ -402,15 +423,13 @@ async function updateExpense(req, res, next) {
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ error: 'At least one item is required for itemized expense' });
       }
-      processedItems = items.map((it) => ({
-        name: (it.name || 'Item').trim(),
-        amountPaise: it.amountPaise !== undefined ? Number(it.amountPaise) : toPaise(it.amountINR),
-        assignedUserIds: (it.assignedUserIds || []).map(Number),
-      }));
+      processedItems = normalizeItems(items);
 
       calculatedParticipants = calculateSplit('itemized', totalPaise, {
         items: processedItems,
-        sharedTaxPaise: req.body.sharedTaxPaise || 0,
+        sharedTaxPaise: req.body.sharedTaxPaise === undefined
+          ? 0
+          : parseNonNegativePaise(req.body.sharedTaxPaise, 'sharedTaxPaise'),
       }, [...activeMemberIds]);
     } else {
       calculatedParticipants = calculateSplit(

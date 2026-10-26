@@ -4,6 +4,7 @@
 const { query, withTransaction } = require('../db');
 const { toPaise } = require('../utils/money');
 const { generateUpiUri } = require('../utils/upi');
+const { parsePaise } = require('../utils/validators');
 
 /**
  * Propose or record a settlement payment
@@ -32,10 +33,9 @@ async function createSettlement(req, res, next) {
       return res.status(400).json({ error: 'A member cannot settle with themselves' });
     }
 
-    const amountPaise = rawAmountPaise !== undefined ? Number(rawAmountPaise) : toPaise(amountINR);
-    if (isNaN(amountPaise) || amountPaise <= 0) {
-      return res.status(400).json({ error: 'Settlement amount must be greater than 0' });
-    }
+    const amountPaise = rawAmountPaise !== undefined
+      ? parsePaise(rawAmountPaise, 'amountPaise')
+      : toPaise(amountINR, 'amountINR');
 
     // Verify both users are active group members
     const membersRes = await query(
@@ -111,6 +111,9 @@ async function createSettlement(req, res, next) {
       settlement: savedSettlement,
     });
   } catch (err) {
+    if (err.status === 400) {
+      return res.status(400).json({ error: err.message });
+    }
     next(err);
   }
 }
@@ -434,7 +437,9 @@ async function getUpiDetails(req, res, next) {
       return res.status(400).json({ error: `${recipient.name} does not have a UPI ID registered on their profile.` });
     }
 
-    const amountPaise = rawAmountPaise !== undefined ? Number(rawAmountPaise) : toPaise(amountINR);
+    const amountPaise = rawAmountPaise !== undefined
+      ? parsePaise(rawAmountPaise, 'amountPaise')
+      : toPaise(amountINR, 'amountINR');
     const upiUri = generateUpiUri({
       upiId: recipient.upi_id,
       recipientName: recipient.name,

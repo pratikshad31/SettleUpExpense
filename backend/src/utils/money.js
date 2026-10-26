@@ -1,6 +1,16 @@
 // backend/src/utils/money.js
 // Monetary manipulation in integer paise (1 INR = 100 Paise)
 
+const { parsePaise } = require('./validators');
+
+function invalidInr(fieldName, problem) {
+  const error = new Error(
+    `${fieldName}: ${problem}. Expected a positive INR amount with at most 2 decimal places that converts to 1–1000000000 paise.`
+  );
+  error.status = 400;
+  return error;
+}
+
 /**
  * Convert INR (number or string, e.g. 150.50) to integer Paise (15050)
  * Uses precise rounding to prevent binary floating point artifacts.
@@ -8,46 +18,46 @@
  * @param {number|string} amount
  * @returns {number}
  */
-function toPaise(amount) {
+function toPaise(amount, fieldName = 'amountINR') {
   if (amount === null || amount === undefined || amount === '') {
-    throw new Error('Amount cannot be null or empty');
+    throw invalidInr(fieldName, 'must not be empty');
   }
   if (typeof amount !== 'number' && typeof amount !== 'string') {
-    throw new Error(`Invalid amount: ${amount}`);
+    throw invalidInr(fieldName, 'must be a number or numeric string');
   }
 
   let num;
   if (typeof amount === 'string') {
     const trimmed = amount.trim();
     if (!/^-?\d+(\.\d+)?$/.test(trimmed)) {
-      throw new Error(`Invalid amount: ${amount}`);
+      throw invalidInr(fieldName, 'must be a valid numeric amount');
     }
     if (trimmed.includes('.')) {
       const decimals = trimmed.split('.')[1];
       if (decimals.length > 2) {
-        throw new Error('Amount must have at most 2 decimal places');
+        throw invalidInr(fieldName, 'must have at most 2 decimal places');
       }
     }
     num = Number(trimmed);
   } else {
     num = amount;
     if (isNaN(num)) {
-      throw new Error(`Invalid amount: ${amount}`);
+      throw invalidInr(fieldName, 'must be a valid numeric amount');
     }
     if (!isFinite(num)) {
-      throw new Error('Amount must be finite');
+      throw invalidInr(fieldName, 'must be finite');
     }
     const numStr = num.toString();
     if (numStr.includes('.')) {
       const decimals = numStr.split('.')[1];
       if (decimals.length > 2) {
-        throw new Error('Amount must have at most 2 decimal places');
+        throw invalidInr(fieldName, 'must have at most 2 decimal places');
       }
     }
   }
 
   const roundedPaise = Math.round(num * 100);
-  return roundedPaise;
+  return parsePaise(roundedPaise, fieldName);
 }
 
 /**

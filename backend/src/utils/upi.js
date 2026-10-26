@@ -1,6 +1,8 @@
 // backend/src/utils/upi.js
 // Safe UPI link generator and validator
 
+const { parsePaise } = require('./validators');
+
 /**
  * Validates UPI ID format (e.g. user@okaxis, name@upi, 9876543210@paytm)
  * @param {string} upiId
@@ -31,12 +33,10 @@ function generateUpiUri({ upiId, recipientName, amountPaise, note = 'SettleUp se
   if (!isValidUpiId(cleanUpi)) {
     throw new Error(`Invalid recipient UPI ID: ${upiId}`);
   }
-  if (!amountPaise || isNaN(amountPaise) || Number(amountPaise) <= 0) {
-    throw new Error('Valid positive amount in paise is required for UPI link');
-  }
+  const validAmountPaise = parsePaise(amountPaise, 'amountPaise');
 
   const cleanName = (recipientName || 'Group Member').trim();
-  const amountInr = (Number(amountPaise) / 100).toFixed(2);
+  const amountInr = (validAmountPaise / 100).toFixed(2);
   const cleanNote = (note || 'Expense Settlement').substring(0, 50).trim();
 
   const params = new URLSearchParams({

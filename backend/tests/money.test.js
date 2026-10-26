@@ -12,7 +12,9 @@ describe('Module 1: Money Utilities (src/utils/money.js)', () => {
       assert.strictEqual(toPaise(150.5), 15050);
       assert.strictEqual(toPaise(150.55), 15055);
       assert.strictEqual(toPaise(0.01), 1);
-      assert.strictEqual(toPaise(0), 0);
+      assert.throws(() => toPaise(0), (err) => err.status === 400 && /amountINR/.test(err.message));
+      assert.strictEqual(toPaise(10000000), 1000000000);
+      assert.throws(() => toPaise(10000000.01), (err) => err.status === 400);
     });
 
     it('should convert string INR values to paise', () => {
@@ -29,17 +31,13 @@ describe('Module 1: Money Utilities (src/utils/money.js)', () => {
     });
 
     it('should reject invalid non-numeric strings and types', () => {
-      assert.throws(() => toPaise('abc'), /Invalid amount/i);
-      assert.throws(() => toPaise('100abc'), /Invalid amount/i);
-      assert.throws(() => toPaise(''), /Amount cannot be null or empty/i);
-      assert.throws(() => toPaise(null), /Amount cannot be null or empty/i);
-      assert.throws(() => toPaise(undefined), /Amount cannot be null or empty/i);
-      assert.throws(() => toPaise(true), /Invalid amount/i);
-      assert.throws(() => toPaise(false), /Invalid amount/i);
-      assert.throws(() => toPaise([]), /Invalid amount/i);
-      assert.throws(() => toPaise({}), /Invalid amount/i);
-      assert.throws(() => toPaise(Infinity), /finite/i);
-      assert.throws(() => toPaise(NaN), /Invalid amount/i);
+      const invalidValues = ['abc', '100abc', '', null, undefined, true, false, [], {}, Infinity, NaN];
+      for (const value of invalidValues) {
+        assert.throws(
+          () => toPaise(value),
+          (err) => err.status === 400 && /^amountINR: .+ Expected .+\.$/.test(err.message)
+        );
+      }
     });
   });
 

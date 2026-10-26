@@ -92,6 +92,22 @@ describe('Module 2: Split Methods Utilities (src/utils/splits.js)', () => {
       ];
       assert.throws(() => calculateExactSplit(10000, participants), /Duplicate participant detected/i);
     });
+
+    it('should reject fractional exact share amounts as a 400-style validation error', () => {
+      assert.throws(
+        () => calculateExactSplit(100, [{ userId: 1, amountPaise: 100.5 }]),
+        (err) => err.status === 400 && /amountPaise/.test(err.message)
+      );
+    });
+  });
+
+  describe('Itemized split paise validation', () => {
+    it('should reject a fractional item price as a 400-style validation error', () => {
+      assert.throws(
+        () => calculateItemizedSplit(100, [{ name: 'Bad price', amountPaise: 1.5, assignedUserIds: [1] }]),
+        (err) => err.status === 400 && /amountPaise/.test(err.message)
+      );
+    });
   });
 
   describe('3. calculatePercentageSplit(totalPaise, participants)', () => {

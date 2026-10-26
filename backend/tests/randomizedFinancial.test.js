@@ -55,7 +55,8 @@ describe('Randomized Financial Property Invariant Tests (100 Simulations)', () =
             if (i === selectedParticipants.length - 1) {
               exactParts.push({ userId: selectedParticipants[i], amountPaise: remaining });
             } else {
-              const portion = randomInt(0, remaining);
+              const remainingParticipants = selectedParticipants.length - i - 1;
+              const portion = randomInt(1, remaining - remainingParticipants);
               exactParts.push({ userId: selectedParticipants[i], amountPaise: portion });
               remaining -= portion;
             }

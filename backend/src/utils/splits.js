@@ -1,6 +1,8 @@
 // backend/src/utils/splits.js
 // Complete implementation of all 6 Split Methods with deterministic paise remainder distribution
 
+const { MAX_AMOUNT_PAISE, parsePaise, parseNonNegativePaise, parseSignedPaise } = require('./validators');
+
 /**
  * 1. Equal Split
  * Divides total amount in paise equally among N participants.
@@ -11,6 +13,7 @@
  * @returns {Array<{ userId: number, sharePaise: number, shareValue: number|null, adjustmentPaise: number }>}
  */
 function calculateEqualSplit(totalPaise, participantIds) {
+  totalPaise = parsePaise(totalPaise, 'totalPaise');
   if (!Array.isArray(participantIds) || participantIds.length === 0) {
     throw new Error('At least one participant is required for equal split');
   }
@@ -41,6 +44,7 @@ function calculateEqualSplit(totalPaise, participantIds) {
  * @returns {Array<{ userId: number, sharePaise: number, shareValue: number|null, adjustmentPaise: number }>}
  */
 function calculateExactSplit(totalPaise, participants) {
+  totalPaise = parsePaise(totalPaise, 'totalPaise');
   if (!Array.isArray(participants) || participants.length === 0) {
     throw new Error('At least one participant is required for exact split');
   }
@@ -52,9 +56,19 @@ function calculateExactSplit(totalPaise, participants) {
   const seenUsers = new Set();
   const result = [];
 
-  for (const p of participants) {
+  for (const [index, p] of participants.entries()) {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) {
+      throw new Error(`participants[${index}]: must be an object. Expected an exact split participant.`);
+    }
     const userId = Number(p.userId);
-    const sharePaise = Number(p.amountPaise);
+    if (Number(p.amountPaise) < 0) {
+      const error = new Error(
+        `participants[${index}].amountPaise: participant ${userId} cannot have a negative exact share. Expected an integer paise amount from 1 to ${MAX_AMOUNT_PAISE}.`
+      );
+      error.status = 400;
+      throw error;
+    }
+    const sharePaise = parsePaise(p.amountPaise, `participants[${index}].amountPaise`);
 
     if (isNaN(userId) || isNaN(sharePaise)) {
       throw new Error('Invalid participant userId or amountPaise');
@@ -68,6 +82,7 @@ function calculateExactSplit(totalPaise, participants) {
 
     seenUsers.add(userId);
     runningSum += sharePaise;
+    parseNonNegativePaise(runningSum, 'exact split amount sum');
     result.push({
       userId,
       sharePaise,
@@ -97,6 +112,7 @@ function calculateExactSplit(totalPaise, participants) {
  * @returns {Array<{ userId: number, sharePaise: number, shareValue: number, adjustmentPaise: number }>}
  */
 function calculatePercentageSplit(totalPaise, participants) {
+  totalPaise = parsePaise(totalPaise, 'totalPaise');
   if (!Array.isArray(participants) || participants.length === 0) {
     throw new Error('At least one participant is required for percentage split');
   }
@@ -177,6 +193,7 @@ function calculatePercentageSplit(totalPaise, participants) {
  * @returns {Array<{ userId: number, sharePaise: number, shareValue: number, adjustmentPaise: number }>}
  */
 function calculateSharesSplit(totalPaise, participants) {
+  totalPaise = parsePaise(totalPaise, 'totalPaise');
   if (!Array.isArray(participants) || participants.length === 0) {
     throw new Error('At least one participant is required for shares split');
   }
@@ -250,6 +267,7 @@ function calculateSharesSplit(totalPaise, participants) {
  * @returns {Array<{ userId: number, sharePaise: number, shareValue: number|null, adjustmentPaise: number }>}
  */
 function calculateAdjustmentSplit(totalPaise, participants) {
+  totalPaise = parsePaise(totalPaise, 'totalPaise');
   if (!Array.isArray(participants) || participants.length === 0) {
     throw new Error('At least one participant is required for adjustment split');
   }
@@ -260,9 +278,12 @@ function calculateAdjustmentSplit(totalPaise, participants) {
   const seenUsers = new Set();
   let sumAdjustments = 0;
 
-  for (const p of participants) {
+  for (const [index, p] of participants.entries()) {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) {
+      throw new Error(`participants[${index}]: must be an object. Expected an adjustment split participant.`);
+    }
     const userId = Number(p.userId);
-    const adj = Number(p.adjustmentPaise || 0);
+    const adj = p.adjustmentPaise === undefined ? 0 : parseSignedPaise(p.adjustmentPaise, `participants[${index}].adjustmentPaise`);
     if (isNaN(userId) || isNaN(adj)) {
       throw new Error('Invalid participant userId or adjustmentPaise');
     }
@@ -271,6 +292,9 @@ function calculateAdjustmentSplit(totalPaise, participants) {
     }
     seenUsers.add(userId);
     sumAdjustments += adj;
+    if (!Number.isSafeInteger(sumAdjustments)) {
+      throw new Error(`adjustmentPaise: combined value must be a safe integer. Expected an integer paise amount from -${MAX_AMOUNT_PAISE} to ${MAX_AMOUNT_PAISE}.`);
+    }
   }
 
   const netDistributable = totalPaise - sumAdjustments;
@@ -287,9 +311,11 @@ function calculateAdjustmentSplit(totalPaise, participants) {
 
   const result = sortedParticipants.map((p, index) => {
     const userId = Number(p.userId);
-    const adj = Number(p.adjustmentPaise || 0);
+    const adj = p.adjustmentPaise === undefined ? 0 : parseSignedPaise(p.adjustmentPaise, 'adjustmentPaise');
     const baseShare = index < remainder ? base + 1 : base;
     const finalShare = baseShare + adj;
+
+    parseNonNegativePaise(finalShare, `participants[${index}].sharePaise`);
 
     if (finalShare < 0) {
       throw new Error(`Adjustment for user ${userId} results in a negative final share: ₹${(finalShare / 100).toFixed(2)}`);
@@ -318,6 +344,8 @@ function calculateAdjustmentSplit(totalPaise, participants) {
  * @returns {Array<{ userId: number, sharePaise: number, shareValue: number|null, adjustmentPaise: number }>}
  */
 function calculateItemizedSplit(totalPaise, items, sharedTaxPaise = 0, allParticipantIds = []) {
+  totalPaise = parsePaise(totalPaise, 'totalPaise');
+  sharedTaxPaise = parseNonNegativePaise(sharedTaxPaise, 'sharedTaxPaise');
   if (!Array.isArray(items) || items.length === 0) {
     throw new Error('At least one item is required for itemized split');
   }
@@ -329,16 +357,17 @@ function calculateItemizedSplit(totalPaise, items, sharedTaxPaise = 0, allPartic
 
   // Accumulate member item shares
   let itemsTotalPaise = 0;
-  for (const item of items) {
-    const itemAmount = Number(item.amountPaise);
-    if (isNaN(itemAmount) || itemAmount <= 0) {
-      throw new Error(`Item "${item.name}" amount must be greater than 0`);
+  for (const [index, item] of items.entries()) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`items[${index}]: must be an object. Expected an item with an integer paise amount.`);
     }
+    const itemAmount = parsePaise(item.amountPaise, `items[${index}].amountPaise`);
     if (!Array.isArray(item.assignedUserIds) || item.assignedUserIds.length === 0) {
       throw new Error(`Item "${item.name}" must be assigned to at least one user`);
     }
 
     itemsTotalPaise += itemAmount;
+    parseNonNegativePaise(itemsTotalPaise, 'item amount sum');
 
     // Split item amount equally among its assigned users
     const itemShares = calculateEqualSplit(itemAmount, item.assignedUserIds);

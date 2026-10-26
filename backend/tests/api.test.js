@@ -308,4 +308,143 @@ describe('API Integration Test Suite', () => {
       assert.strictEqual(res2.body.settlement.id, originalId);
     });
   });
+
+  describe('5. Safe integer paise validation', () => {
+    it('rejects invalid paise on expense and settlement creation and accepts the configured maximum', async () => {
+      const invalidValues = [
+        100.5,
+        1e23,
+        9007199254740992,
+        1000000001,
+        -5,
+        0,
+        'abc',
+        null,
+        '',
+        [],
+        {},
+      ];
+      const expenseIds = [];
+      const settlementIds = [];
+
+      const trackCreatedId = (res, collection, field) => {
+        const id = res.body?.[field]?.id;
+        if (id) collection.push(id);
+      };
+
+      try {
+        for (const value of invalidValues) {
+          const expenseRes = await request(app)
+            .post(`/api/groups/${flatGroupId}/expenses`)
+            .set('Authorization', `Bearer ${aaravToken}`)
+            .send({
+              description: 'Invalid paise validation expense',
+              amountPaise: value,
+              participantIds: [1, 2],
+            });
+          trackCreatedId(expenseRes, expenseIds, 'expense');
+          assert.equal(expenseRes.status, 400, `expense amountPaise ${JSON.stringify(value)} should return 400`);
+          assert.match(expenseRes.body.error, /^amountPaise: .+ Expected .+\.$/);
+
+          const settlementRes = await request(app)
+            .post(`/api/groups/${flatGroupId}/settlements`)
+            .set('Authorization', `Bearer ${aaravToken}`)
+            .send({ fromUser: 1, toUser: 2, amountPaise: value });
+          trackCreatedId(settlementRes, settlementIds, 'settlement');
+          assert.equal(settlementRes.status, 400, `settlement amountPaise ${JSON.stringify(value)} should return 400`);
+          assert.match(settlementRes.body.error, /^amountPaise: .+ Expected .+\.$/);
+        }
+
+        const invalidExpenseConversion = await request(app)
+          .post(`/api/groups/${flatGroupId}/expenses`)
+          .set('Authorization', `Bearer ${aaravToken}`)
+          .send({ description: 'Invalid INR conversion', amountINR: 'abc', participantIds: [1, 2] });
+        trackCreatedId(invalidExpenseConversion, expenseIds, 'expense');
+        assert.equal(invalidExpenseConversion.status, 400);
+        assert.match(invalidExpenseConversion.body.error, /^amountINR: .+ Expected .+\.$/);
+
+        const invalidSettlementConversion = await request(app)
+          .post(`/api/groups/${flatGroupId}/settlements`)
+          .set('Authorization', `Bearer ${aaravToken}`)
+          .send({ fromUser: 1, toUser: 2, amountINR: 'abc' });
+        trackCreatedId(invalidSettlementConversion, settlementIds, 'settlement');
+        assert.equal(invalidSettlementConversion.status, 400);
+        assert.match(invalidSettlementConversion.body.error, /^amountINR: .+ Expected .+\.$/);
+
+        const invalidPayer = await request(app)
+          .post(`/api/groups/${flatGroupId}/expenses`)
+          .set('Authorization', `Bearer ${aaravToken}`)
+          .send({
+            description: 'Invalid payer paise',
+            amountPaise: 10000,
+            payers: [{ userId: 1, amountPaise: 10000.5 }],
+            participantIds: [1, 2],
+          });
+        trackCreatedId(invalidPayer, expenseIds, 'expense');
+        assert.equal(invalidPayer.status, 400);
+
+        const invalidExactShare = await request(app)
+          .post(`/api/groups/${flatGroupId}/expenses`)
+          .set('Authorization', `Bearer ${aaravToken}`)
+          .send({
+            description: 'Invalid exact share paise',
+            amountPaise: 10000,
+            splitType: 'exact',
+            splitData: [
+              { userId: 1, amountPaise: 9999 },
+              { userId: 2, amountPaise: 1.5 },
+            ],
+          });
+        trackCreatedId(invalidExactShare, expenseIds, 'expense');
+        assert.equal(invalidExactShare.status, 400);
+
+        const invalidItemPrice = await request(app)
+          .post(`/api/groups/${flatGroupId}/expenses`)
+          .set('Authorization', `Bearer ${aaravToken}`)
+          .send({
+            description: 'Invalid item paise',
+            amountPaise: 10000,
+            splitType: 'itemized',
+            items: [{ name: 'Bad price', amountPaise: 1.5, assignedUserIds: [1] }],
+          });
+        trackCreatedId(invalidItemPrice, expenseIds, 'expense');
+        assert.equal(invalidItemPrice.status, 400);
+
+        const maxExpense = await request(app)
+          .post(`/api/groups/${flatGroupId}/expenses`)
+          .set('Authorization', `Bearer ${aaravToken}`)
+          .send({
+            description: 'Maximum allowed paise expense',
+            amountPaise: 1000000000,
+            participantIds: [1, 2],
+          });
+        trackCreatedId(maxExpense, expenseIds, 'expense');
+        assert.equal(maxExpense.status, 201);
+        assert.equal(Number(maxExpense.body.expense.total_amount_paise), 1000000000);
+
+        const maxSettlement = await request(app)
+          .post(`/api/groups/${flatGroupId}/settlements`)
+          .set('Authorization', `Bearer ${aaravToken}`)
+          .send({ fromUser: 1, toUser: 2, amountPaise: 1000000000 });
+        trackCreatedId(maxSettlement, settlementIds, 'settlement');
+        assert.equal(maxSettlement.status, 201);
+        assert.equal(Number(maxSettlement.body.settlement.amount_paise), 1000000000);
+      } finally {
+        if (expenseIds.length) {
+          await pool.query(
+            `DELETE FROM activity_logs WHERE entity_type = 'expense' AND entity_id = ANY($1::int[])`,
+            [expenseIds]
+          );
+          await pool.query('DELETE FROM expenses WHERE id = ANY($1::int[])', [expenseIds]);
+        }
+        if (settlementIds.length) {
+          await pool.query(
+            `DELETE FROM activity_logs WHERE entity_type = 'settlement' AND entity_id = ANY($1::int[])`,
+            [settlementIds]
+          );
+          await pool.query('DELETE FROM settlements WHERE id = ANY($1::int[])', [settlementIds]);
+        }
+      }
+    });
+  });
 });

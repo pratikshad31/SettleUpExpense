@@ -54,7 +54,7 @@ describe('Module 3: UPI Utilities (src/utils/upi.js)', () => {
       assert.strictEqual(uri, '');
     });
 
-    it('should reject invalid upiId or non-positive amount', () => {
+    it('should reject invalid upiId or invalid paise amounts', () => {
       assert.throws(
         () =>
           generateUpiUri({
@@ -72,7 +72,7 @@ describe('Module 3: UPI Utilities (src/utils/upi.js)', () => {
             recipientName: 'Test',
             amountPaise: 0,
           }),
-        /Valid positive amount in paise/i
+        (err) => err.status === 400 && /^amountPaise: .+ Expected .+\.$/.test(err.message)
       );
 
       assert.throws(
@@ -82,8 +82,15 @@ describe('Module 3: UPI Utilities (src/utils/upi.js)', () => {
             recipientName: 'Test',
             amountPaise: -500,
           }),
-        /Valid positive amount in paise/i
+        (err) => err.status === 400 && /^amountPaise: .+ Expected .+\.$/.test(err.message)
       );
+
+      for (const amountPaise of [1.5, 1000000001, 9007199254740992, 'abc', null, [], {}]) {
+        assert.throws(
+          () => generateUpiUri({ upiId: 'valid@upi', recipientName: 'Test', amountPaise }),
+          (err) => err.status === 400 && /^amountPaise: .+ Expected .+\.$/.test(err.message)
+        );
+      }
     });
   });
 });
