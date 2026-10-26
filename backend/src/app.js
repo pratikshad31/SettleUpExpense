@@ -34,6 +34,28 @@ app.use(cors({
   },
 }));
 app.use(express.json({ limit: '100kb' }));
+app.use((req, res, next) => {
+  if (req.body === undefined) req.body = {};
+
+  if (req.body === null || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'Request body must be a JSON object' });
+  }
+
+  function containsNullByte(value) {
+    if (typeof value === 'string') return value.includes('\0');
+    if (Array.isArray(value)) return value.some(containsNullByte);
+    if (value && typeof value === 'object') {
+      return Object.entries(value).some(([key, nestedValue]) => key.includes('\0') || containsNullByte(nestedValue));
+    }
+    return false;
+  }
+
+  if (containsNullByte(req.body)) {
+    return res.status(400).json({ error: 'Request body must not contain null bytes' });
+  }
+
+  next();
+});
 app.use(generalLimiter);
 
 // Health check endpoints
