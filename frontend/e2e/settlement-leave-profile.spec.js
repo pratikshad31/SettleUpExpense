@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { test, expect, authenticateForUi, openGroupThroughUi, balanceSnapshot } from './helpers/fixtures.js';
 import { registerUser, seedExpense } from './helpers/api.js';
+import process from 'node:process';
 
 const baseURL = process.env.E2E_BASE_URL || 'http://localhost:5174';
 
