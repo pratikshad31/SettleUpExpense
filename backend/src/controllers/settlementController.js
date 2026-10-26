@@ -229,6 +229,9 @@ async function markPaid(req, res, next) {
       if (st.status === 'confirmed') {
         throw { status: 400, message: 'Settlement is already confirmed' };
       }
+      if (st.status === 'marked_paid') {
+        throw { status: 400, message: 'Settlement is already marked as paid' };
+      }
       if (st.status === 'rejected') {
         throw { status: 400, message: 'Cannot mark a rejected settlement as paid' };
       }
