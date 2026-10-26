@@ -7,19 +7,16 @@ function errorHandler(err, req, res, next) {
   if (typeof statusCode !== 'number' || statusCode < 100 || statusCode > 599) {
     statusCode = 500;
   }
-  const isDev = process.env.NODE_ENV === 'development';
-
-  if (statusCode === 500) {
+  const isServerError = statusCode >= 500;
+  if (isServerError) {
     console.error('Unhandled Server Error:', err);
   }
 
-  // Safe message formatting
-  const message = errorObj.message || 'Internal Server Error';
+  const message = isServerError
+    ? 'Internal Server Error'
+    : errorObj.message || 'Internal Server Error';
 
-  res.status(statusCode).json({
-    error: message,
-    ...(isDev && errorObj.stack && { stack: errorObj.stack }),
-  });
+  res.status(statusCode).json({ error: message });
 }
 
 module.exports = errorHandler;

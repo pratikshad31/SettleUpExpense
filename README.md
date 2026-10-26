@@ -122,9 +122,10 @@ PORT=5000
 JWT_SECRET=change_this_to_a_long_random_string
 JWT_EXPIRES_IN=7d
 NODE_ENV=development
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
 
-> `DB_NAME` must match the database you created in step 2 (the connection layer falls back to `splitwise_app` if `DB_NAME` is unset).
+> Set all database variables in the environment. `DB_NAME` must match the database you created in step 2. `CORS_ORIGINS` is a comma-separated list of frontend origins allowed to call the API.
 
 ### 4. Configure the Frontend
 
@@ -251,7 +252,6 @@ The seed dataset includes 7 expenses covering **all 6 split methods** (including
 ```
 SettleUpExpenses/
 ├── README.md                                   # This documentation
-├── SettleUpExpenses_Project_Documentation.pdf  # Standalone project & architecture PDF
 ├── package.json                                # Root convenience scripts (migrate/seed/test/dev)
 ├── .env.example                                # Master environment template
 ├── docs/
@@ -349,7 +349,7 @@ SettleUpExpenses/
 - **Strong password policy** — enforced at signup and password change, with a 22-entry weak-password blocklist.
 - **Financial balance protection** — members cannot leave a group until their net balance is exactly ₹0.00.
 - **Immutable financial history** — expenses are soft-voided (never deleted), edits are versioned, and every settlement transition is logged.
-- **Safe error handling** — centralized error middleware returns clean messages; stack traces are exposed only when `NODE_ENV=development`.
+- **Safe error handling** — unexpected server errors return a generic message; details are logged on the server.
 
 ---
 
@@ -358,7 +358,6 @@ SettleUpExpenses/
 - [`docs/API_DOCUMENTATION.md`](docs/API_DOCUMENTATION.md) — REST endpoint reference
 - [`docs/DATABASE_SCHEMA.md`](docs/DATABASE_SCHEMA.md) — schema, constraints, indexes, ERD
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — production deployment guide
-- `SettleUpExpenses_Project_Documentation.pdf` — full project & architecture write-up
 
 ---
 

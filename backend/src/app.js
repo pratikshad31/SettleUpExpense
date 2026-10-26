@@ -3,6 +3,7 @@
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const { pool, query } = require('./db');
 const { generalLimiter } = require('./middleware/rateLimiter');
 const errorHandler = require('./middleware/errorHandler');
@@ -16,8 +17,23 @@ const userRoutes = require('./routes/userRoutes');
 const app = express();
 
 // Security and utility middleware
-app.use(cors());
-app.use(express.json());
+const allowedOrigins = new Set(
+  (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+);
+if (allowedOrigins.has('*')) {
+  throw new Error('CORS_ORIGINS must contain explicit origins; wildcard is not allowed.');
+}
+
+app.use(helmet());
+app.use(cors({
+  origin(origin, callback) {
+    callback(null, !origin || allowedOrigins.has(origin));
+  },
+}));
+app.use(express.json({ limit: '100kb' }));
 app.use(generalLimiter);
 
 // Health check endpoints

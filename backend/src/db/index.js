@@ -5,12 +5,23 @@ const { Pool } = require('pg');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
+const requiredDatabaseSettings = ['DB_USER', 'DB_PASSWORD', 'DB_HOST', 'DB_PORT', 'DB_NAME'];
+const missingSettings = requiredDatabaseSettings.filter((name) => !process.env[name]?.trim());
+if (missingSettings.length > 0) {
+  throw new Error(`Missing required database environment variable(s): ${missingSettings.join(', ')}`);
+}
+
+const databasePort = Number(process.env.DB_PORT);
+if (!Number.isInteger(databasePort) || databasePort < 1 || databasePort > 65535) {
+  throw new Error('DB_PORT must be an integer between 1 and 65535.');
+}
+
 const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT, 10) || 5432,
-  database: process.env.DB_NAME || 'splitwise_app',
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  host: process.env.DB_HOST,
+  port: databasePort,
+  database: process.env.DB_NAME,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
