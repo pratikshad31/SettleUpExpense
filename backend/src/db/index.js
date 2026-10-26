@@ -22,6 +22,7 @@ const pool = new Pool({
   host: process.env.DB_HOST,
   port: databasePort,
   database: process.env.DB_NAME,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
