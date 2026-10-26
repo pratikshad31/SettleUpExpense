@@ -1,15 +1,14 @@
 // frontend/src/pages/SignupPage.jsx
 // User registration page with real-time password strength and validation
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authState';
 import {
   ArrowRightLeft,
   ArrowRight,
   AlertCircle,
   Check,
-  X,
   Eye,
   EyeOff,
   Lock,

@@ -1,11 +1,11 @@
 // frontend/src/pages/ProfilePage.jsx
 // User profile editing, UPI settings, and password updates
 
-import React, { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useState } from 'react';
+import { useAuth } from '../context/authState';
 import { api } from '../api/client';
 import Toast from '../components/Toast';
-import { User, Shield, CreditCard, Check, AlertCircle } from 'lucide-react';
+import { User, Shield, Check, AlertCircle } from 'lucide-react';
 import { evaluatePasswordStrength } from '../utils/passwordStrength';
 
 export default function ProfilePage() {

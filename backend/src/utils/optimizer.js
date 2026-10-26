@@ -124,7 +124,7 @@ function calculateBalancesAndOptimization(expenses = [], settlements = [], group
 
   // Invariant verification: sum of net balances MUST be 0
   if (Math.abs(sumNetBalances) > 0) {
-    console.warn(`Zero-sum balance invariant check warning: sum = ${sumNetBalances} paise`);
+    throw new Error(`Zero-sum balance invariant violated: sum = ${sumNetBalances} paise`);
   }
 
   // 3. Settlement Optimization Algorithm

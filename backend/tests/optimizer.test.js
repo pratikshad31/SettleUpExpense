@@ -158,4 +158,19 @@ describe('Settlement Optimizer & Net Balance Tests', () => {
     assert.deepStrictEqual(res.suggestions, []);
     assert.strictEqual(res.netSumPaise, 0);
   });
+
+  it('should throw when calculated balances violate the zero-sum invariant', () => {
+    const inconsistentExpense = [{
+      id: 1,
+      total_amount_paise: 100,
+      is_voided: false,
+      payers: [{ user_id: 1, amount_paise: 100 }],
+      participants: [{ user_id: 1, share_amount_paise: 99 }],
+    }];
+
+    assert.throws(
+      () => calculateBalancesAndOptimization(inconsistentExpense, [], [{ id: 1, name: 'Alice' }]),
+      /zero-sum balance invariant/i
+    );
+  });
 });

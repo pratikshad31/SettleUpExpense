@@ -1,10 +1,10 @@
 // frontend/src/pages/DashboardPage.jsx
 // Groups dashboard with overall net balance summary and group actions
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authState';
 import Modal from '../components/Modal';
 import Toast from '../components/Toast';
 import { formatINR } from '../utils/formatters';
@@ -54,7 +54,20 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    loadGroups();
+    let active = true;
+    api.get('/groups')
+      .then((data) => {
+        if (active) setGroups(data.groups || []);
+      })
+      .catch((err) => {
+        if (active) setToast({ message: err.message || 'Failed to load groups', type: 'error' });
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Compute overall balance across all groups

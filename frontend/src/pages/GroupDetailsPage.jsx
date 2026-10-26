@@ -1,10 +1,10 @@
 // frontend/src/pages/GroupDetailsPage.jsx
 // Complete Group Details Hub with Expenses, Balances & Who-Owes-Whom, Settle Up, Members, and Activity
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authState';
 import ExpenseModal from '../components/ExpenseModal';
 import RecordPaymentModal from '../components/RecordPaymentModal';
 import MarkPaidModal from '../components/MarkPaidModal';
@@ -26,13 +26,10 @@ import {
   QrCode,
   CheckCircle,
   XCircle,
-  AlertTriangle,
-  ExternalLink,
   Edit2,
   Trash2,
   Clock,
   Search,
-  Filter,
   UserPlus,
   LogOut,
   Sparkles,
@@ -94,37 +91,54 @@ export default function GroupDetailsPage() {
   const [confirmDialog, setConfirmDialog] = useState(null);
 
   // Data fetchers
+  const fetchGroupData = useCallback(() => Promise.all([
+    api.get(`/groups/${groupId}`),
+    api.get(`/groups/${groupId}/expenses?includeVoided=true`),
+    api.get(`/groups/${groupId}/balances`),
+    api.get(`/groups/${groupId}/debts`),
+    api.get(`/groups/${groupId}/settlements`),
+    api.get(`/groups/${groupId}/activity`),
+  ]), [groupId]);
+
+  const applyGroupData = useCallback(([groupRes, expRes, balRes, debtsRes, stRes, actRes]) => {
+    setGroup(groupRes.group);
+    setMembership(groupRes.membership);
+    setMembers(groupRes.members);
+    setExpenses(expRes.expenses);
+    setBalances(balRes.balances);
+    setSuggestions(balRes.suggestions);
+    setDetailedDebts(debtsRes.debts);
+    setSettlements(stRes.settlements);
+    setActivities(actRes.activities);
+  }, []);
+
   const loadGroupData = useCallback(async () => {
     try {
       setLoading(true);
-      const [groupRes, expRes, balRes, debtsRes, stRes, actRes] = await Promise.all([
-        api.get(`/groups/${groupId}`),
-        api.get(`/groups/${groupId}/expenses?includeVoided=true`),
-        api.get(`/groups/${groupId}/balances`),
-        api.get(`/groups/${groupId}/debts`),
-        api.get(`/groups/${groupId}/settlements`),
-        api.get(`/groups/${groupId}/activity`),
-      ]);
-
-      setGroup(groupRes.group);
-      setMembership(groupRes.membership);
-      setMembers(groupRes.members);
-      setExpenses(expRes.expenses);
-      setBalances(balRes.balances);
-      setSuggestions(balRes.suggestions);
-      setDetailedDebts(debtsRes.debts);
-      setSettlements(stRes.settlements);
-      setActivities(actRes.activities);
+      applyGroupData(await fetchGroupData());
     } catch (err) {
       setToast({ message: err.message || 'Failed to load group details', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [groupId]);
+  }, [applyGroupData, fetchGroupData]);
 
   useEffect(() => {
-    loadGroupData();
-  }, [loadGroupData]);
+    let active = true;
+    fetchGroupData()
+      .then((data) => {
+        if (active) applyGroupData(data);
+      })
+      .catch((err) => {
+        if (active) setToast({ message: err.message || 'Failed to load group details', type: 'error' });
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [applyGroupData, fetchGroupData]);
 
   // Copy invite code
   const handleCopyCode = () => {
@@ -137,23 +151,19 @@ export default function GroupDetailsPage() {
 
   // Add / Edit Expense Save Handler
   const handleSaveExpense = async (payload) => {
-    try {
-      if (editingExpense) {
-        await api.put(`/expenses/${editingExpense.id}`, {
-          ...payload,
-          version: editingExpense.version,
-        });
-        setToast({ message: 'Expense updated successfully!', type: 'success' });
-      } else {
-        await api.post(`/groups/${groupId}/expenses`, payload);
-        setToast({ message: 'Expense added successfully!', type: 'success' });
-      }
-      setIsExpenseModalOpen(false);
-      setEditingExpense(null);
-      await loadGroupData();
-    } catch (err) {
-      throw err;
+    if (editingExpense) {
+      await api.put(`/expenses/${editingExpense.id}`, {
+        ...payload,
+        version: editingExpense.version,
+      });
+      setToast({ message: 'Expense updated successfully!', type: 'success' });
+    } else {
+      await api.post(`/groups/${groupId}/expenses`, payload);
+      setToast({ message: 'Expense added successfully!', type: 'success' });
     }
+    setIsExpenseModalOpen(false);
+    setEditingExpense(null);
+    await loadGroupData();
   };
 
   // Void Expense Handler
@@ -170,14 +180,10 @@ export default function GroupDetailsPage() {
 
   // Record Settlement Handler
   const handleSaveSettlement = async (payload) => {
-    try {
-      await api.post(`/groups/${groupId}/settlements`, payload);
-      setToast({ message: 'Settlement payment recorded as pending! Awaiting recipient confirmation.', type: 'success' });
-      setIsRecordPaymentOpen(false);
-      await loadGroupData();
-    } catch (err) {
-      throw err;
-    }
+    await api.post(`/groups/${groupId}/settlements`, payload);
+    setToast({ message: 'Settlement payment recorded as pending! Awaiting recipient confirmation.', type: 'success' });
+    setIsRecordPaymentOpen(false);
+    await loadGroupData();
   };
 
   // 1-click settlement proposal for suggested transactions (status PENDING until confirmed by receiver)
@@ -244,14 +250,10 @@ export default function GroupDetailsPage() {
 
   // Mark Paid Handler
   const handleMarkPaid = async ({ settlementId, referenceId, notes }) => {
-    try {
-      await api.post(`/settlements/${settlementId}/mark-paid`, { referenceId, notes });
-      setToast({ message: 'Payment marked as paid. Waiting for recipient to confirm.', type: 'success' });
-      setIsMarkPaidOpen(false);
-      await loadGroupData();
-    } catch (err) {
-      throw err;
-    }
+    await api.post(`/settlements/${settlementId}/mark-paid`, { referenceId, notes });
+    setToast({ message: 'Payment marked as paid. Waiting for recipient to confirm.', type: 'success' });
+    setIsMarkPaidOpen(false);
+    await loadGroupData();
   };
 
   // Confirm Settlement Handler (Concurrency-safe)
@@ -342,7 +344,7 @@ export default function GroupDetailsPage() {
       const data = await api.get(`/expenses/${exp.id}`);
       setSelectedExpenseDetails(data);
       setIsExpenseDetailsOpen(true);
-    } catch (err) {
+    } catch {
       setToast({ message: 'Failed to load expense details', type: 'error' });
     }
   };

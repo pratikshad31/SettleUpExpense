@@ -1,7 +1,7 @@
 // frontend/src/components/MarkPaidModal.jsx
 // Modal for marking a settlement as paid
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import Modal from './Modal';
 import { AlertCircle } from 'lucide-react';
 import { formatINR } from '../utils/formatters';

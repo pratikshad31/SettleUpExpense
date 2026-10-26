@@ -1,7 +1,7 @@
 // frontend/src/components/Modal.jsx
 // Reusable accessible modal dialog container
 
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { X } from 'lucide-react';
 
 export default function Modal({ isOpen, onClose, title, children, maxWidth = 580 }) {

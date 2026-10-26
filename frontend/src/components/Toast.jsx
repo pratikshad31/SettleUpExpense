@@ -1,7 +1,7 @@
 // frontend/src/components/Toast.jsx
 // Toast notification component
 
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function Toast({ message, type = 'success', onClose }) {

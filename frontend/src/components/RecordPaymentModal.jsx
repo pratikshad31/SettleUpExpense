@@ -1,12 +1,24 @@
 // frontend/src/components/RecordPaymentModal.jsx
 // Modal for recording or proposing a settlement payment
 
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Modal from './Modal';
 import { AlertCircle } from 'lucide-react';
 import { inrToPaise } from '../utils/formatters';
 
-export default function RecordPaymentModal({
+export default function RecordPaymentModal(props) {
+  if (!props.isOpen) return null;
+  const key = [
+    props.defaultFromUser ?? '',
+    props.defaultToUser ?? '',
+    props.defaultAmountPaise ?? '',
+    props.currentUserId ?? '',
+    (props.groupMembers || []).map((member) => member.user_id).join(','),
+  ].join('|');
+  return <RecordPaymentModalForm key={key} {...props} />;
+}
+
+function RecordPaymentModalForm({
   isOpen,
   onClose,
   onSave,
@@ -16,42 +28,28 @@ export default function RecordPaymentModal({
   defaultAmountPaise = null,
   currentUserId = null,
 }) {
-  const [fromUser, setFromUser] = useState('');
-  const [toUser, setToUser] = useState('');
-  const [amountINR, setAmountINR] = useState('');
+  const initialFromUser = groupMembers && groupMembers.length >= 2
+    ? (defaultFromUser
+      ? defaultFromUser.toString()
+      : (currentUserId ? currentUserId.toString() : groupMembers[0].user_id.toString()))
+    : '';
+  const remainingMembers = (groupMembers || [])
+    .filter((member) => member.user_id.toString() !== initialFromUser);
+  const initialToUser = groupMembers && groupMembers.length >= 2
+    ? (defaultToUser
+      ? defaultToUser.toString()
+      : (remainingMembers[0]?.user_id?.toString() || groupMembers[1]?.user_id?.toString() || ''))
+    : '';
+  const [fromUser, setFromUser] = useState(initialFromUser);
+  const [toUser, setToUser] = useState(initialToUser);
+  const [amountINR, setAmountINR] = useState(
+    defaultAmountPaise ? (Number(defaultAmountPaise) / 100).toFixed(2) : ''
+  );
   const [paymentMethod, setPaymentMethod] = useState('upi');
   const [referenceId, setReferenceId] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setError('');
-
-    if (groupMembers && groupMembers.length >= 2) {
-      const initialFrom = defaultFromUser
-        ? defaultFromUser.toString()
-        : (currentUserId ? currentUserId.toString() : groupMembers[0].user_id.toString());
-      setFromUser(initialFrom);
-      const remainingMembers = groupMembers.filter((m) => m.user_id.toString() !== initialFrom);
-      setToUser(
-        defaultToUser
-          ? defaultToUser.toString()
-          : (remainingMembers[0] ? remainingMembers[0].user_id.toString() : (groupMembers[1] ? groupMembers[1].user_id.toString() : ''))
-      );
-    }
-
-    if (defaultAmountPaise) {
-      setAmountINR((Number(defaultAmountPaise) / 100).toFixed(2));
-    } else {
-      setAmountINR('');
-    }
-
-    setPaymentMethod('upi');
-    setReferenceId('');
-    setNotes('');
-  }, [isOpen, defaultFromUser, defaultToUser, defaultAmountPaise, groupMembers, currentUserId]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

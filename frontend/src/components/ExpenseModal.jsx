@@ -1,10 +1,10 @@
 // frontend/src/components/ExpenseModal.jsx
 // Interactive expense creation and editing modal supporting all 6 split methods and multiple payers
 
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Modal from './Modal';
-import { Plus, Trash2, Users, IndianRupee, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { inrToPaise, formatINR } from '../utils/formatters';
+import { Plus, Trash2, IndianRupee, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { inrToPaise } from '../utils/formatters';
 
 const CATEGORIES = [
   'General',
@@ -36,185 +36,149 @@ function remainderToINR(totalPaise, itemsSumPaise) {
   return remainder > 0 ? (remainder / 100).toString() : '0';
 }
 
-export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, editExpense = null }) {
-  const [description, setDescription] = useState('');
-  const [amountINR, setAmountINR] = useState('');
-  const [category, setCategory] = useState('General');
-  const [expenseDate, setExpenseDate] = useState(toLocalDateInputValue(new Date()));
-  const [notes, setNotes] = useState('');
+function createInitialExpenseDraft(editExpense, groupMembers) {
+  const members = groupMembers || [];
+  const memberIds = members.map((member) => Number(member.user_id));
+  const draft = {
+    description: '',
+    amountINR: '',
+    category: 'General',
+    expenseDate: toLocalDateInputValue(new Date()),
+    notes: '',
+    isMultiplePayers: false,
+    singlePayerId: '',
+    payerAmounts: {},
+    splitType: 'equal',
+    selectedParticipants: [],
+    exactShares: {},
+    percentages: {},
+    shares: {},
+    adjustments: {},
+    items: [{ name: '', amountINR: '', assignedUserIds: [] }],
+    sharedTaxOverride: null,
+  };
+
+  if (editExpense) {
+    draft.description = editExpense.description;
+    draft.amountINR = (Number(editExpense.total_amount_paise) / 100).toString();
+    draft.category = editExpense.category || 'General';
+    draft.expenseDate = editExpense.expense_date
+      ? toLocalDateInputValue(editExpense.expense_date)
+      : '';
+    draft.notes = editExpense.notes || '';
+    draft.splitType = editExpense.split_type || 'equal';
+
+    const payers = editExpense.payers || [];
+    if (payers.length > 1) {
+      draft.isMultiplePayers = true;
+      let maxPaise = -1;
+      payers.forEach((payer) => {
+        const paise = Number(payer.amountPaise);
+        draft.payerAmounts[payer.userId] = (paise / 100).toString();
+        if (paise > maxPaise) {
+          maxPaise = paise;
+          draft.singlePayerId = payer.userId.toString();
+        }
+      });
+    } else if (payers.length === 1) {
+      const singleId = payers[0].userId.toString();
+      draft.singlePayerId = singleId;
+      members.forEach((member) => {
+        draft.payerAmounts[member.user_id] = member.user_id.toString() === singleId
+          ? (Number(payers[0].amountPaise) / 100).toString()
+          : '';
+      });
+    } else if (members.length > 0) {
+      draft.singlePayerId = members[0].user_id.toString();
+    }
+
+    const participants = editExpense.participants || [];
+    draft.selectedParticipants = participants.map((participant) => participant.userId);
+    if (editExpense.split_type === 'exact') {
+      participants.forEach((participant) => {
+        draft.exactShares[participant.userId] = (Number(participant.shareAmountPaise) / 100).toString();
+      });
+    } else if (editExpense.split_type === 'percentage') {
+      participants.forEach((participant) => {
+        draft.percentages[participant.userId] = (Number(participant.shareValue) || 0).toString();
+      });
+    } else if (editExpense.split_type === 'shares') {
+      participants.forEach((participant) => {
+        draft.shares[participant.userId] = (Number(participant.shareValue) || 1).toString();
+      });
+    } else if (editExpense.split_type === 'adjustment') {
+      participants.forEach((participant) => {
+        draft.adjustments[participant.userId] = (Number(participant.adjustmentPaise || 0) / 100).toString();
+      });
+    }
+
+    if (editExpense.split_type === 'itemized' && editExpense.items?.length > 0) {
+      draft.items = editExpense.items.map((item) => ({
+        name: item.name || '',
+        amountINR: (Number(item.amountPaise) / 100).toString(),
+        assignedUserIds: item.assignedUserIds?.length > 0
+          ? item.assignedUserIds.map(Number)
+          : memberIds,
+      }));
+    } else {
+      draft.items = [{ name: '', amountINR: '', assignedUserIds: memberIds }];
+    }
+    return draft;
+  }
+
+  if (members.length > 0) {
+    draft.singlePayerId = members[0].user_id.toString();
+    draft.selectedParticipants = members.map((member) => member.user_id);
+    draft.payerAmounts = Object.fromEntries(members.map((member) => [member.user_id, '']));
+    draft.exactShares = draft.payerAmounts;
+    draft.percentages = Object.fromEntries(
+      members.map((member) => [member.user_id, (100 / members.length).toFixed(2)])
+    );
+    draft.shares = Object.fromEntries(members.map((member) => [member.user_id, '1']));
+    draft.adjustments = Object.fromEntries(members.map((member) => [member.user_id, '0']));
+    draft.items = [{ name: '', amountINR: '', assignedUserIds: members.map((member) => member.user_id) }];
+  }
+
+  return draft;
+}
+
+export default function ExpenseModal(props) {
+  if (!props.isOpen) return null;
+  return <ExpenseModalForm key={props.editExpense?.id ?? 'new'} {...props} />;
+}
+
+function ExpenseModalForm({ isOpen, onClose, onSave, groupMembers, editExpense = null }) {
+  const [draft] = useState(() => createInitialExpenseDraft(editExpense, groupMembers));
+  const [description, setDescription] = useState(draft.description);
+  const [amountINR, setAmountINR] = useState(draft.amountINR);
+  const [category, setCategory] = useState(draft.category);
+  const [expenseDate, setExpenseDate] = useState(draft.expenseDate);
+  const [notes, setNotes] = useState(draft.notes);
   const [editReason, setEditReason] = useState('Updated expense');
 
   // Payers State
-  const [isMultiplePayers, setIsMultiplePayers] = useState(false);
-  const [singlePayerId, setSinglePayerId] = useState('');
-  const [payerAmounts, setPayerAmounts] = useState({}); // { [userId]: inrString }
+  const [isMultiplePayers, setIsMultiplePayers] = useState(draft.isMultiplePayers);
+  const [singlePayerId, setSinglePayerId] = useState(draft.singlePayerId);
+  const [payerAmounts, setPayerAmounts] = useState(draft.payerAmounts); // { [userId]: inrString }
 
   // Split Type State
-  const [splitType, setSplitType] = useState('equal');
-  const [selectedParticipants, setSelectedParticipants] = useState([]); // [userId]
-  const [exactShares, setExactShares] = useState({}); // { [userId]: inrString }
-  const [percentages, setPercentages] = useState({}); // { [userId]: percentString }
-  const [shares, setShares] = useState({}); // { [userId]: shareNumberString }
-  const [adjustments, setAdjustments] = useState({}); // { [userId]: inrString }
+  const [splitType, setSplitType] = useState(draft.splitType);
+  const [selectedParticipants, setSelectedParticipants] = useState(draft.selectedParticipants); // [userId]
+  const [exactShares, setExactShares] = useState(draft.exactShares); // { [userId]: inrString }
+  const [percentages, setPercentages] = useState(draft.percentages); // { [userId]: percentString }
+  const [shares] = useState(draft.shares); // { [userId]: shareNumberString }
+  const [adjustments] = useState(draft.adjustments); // { [userId]: inrString }
 
   // Itemized State
-  const [items, setItems] = useState([
-    { name: '', amountINR: '', assignedUserIds: [] },
-  ]);
+  const [items, setItems] = useState(draft.items);
   // Shared tax / delivery fee for itemized splits. Items may legitimately sum to less
   // than the expense total (see seed.js expense 6: items 2150 + shared tax 200 = 2350);
   // backend utils/splits.js distributes that remainder across participants. null = derive
   // from the unallocated remainder; a string = the user's own value.
-  const [sharedTaxOverride, setSharedTaxOverride] = useState(null);
+  const [sharedTaxOverride, setSharedTaxOverride] = useState(draft.sharedTaxOverride);
 
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  // Initialize or populate when opened
-  useEffect(() => {
-    if (!isOpen) return;
-    setError('');
-    setSharedTaxOverride(null);
-
-    const defaultMemberIds = (groupMembers || []).map((m) => Number(m.user_id));
-
-    if (editExpense) {
-      setDescription(editExpense.description);
-      setAmountINR((Number(editExpense.total_amount_paise) / 100).toString());
-      setCategory(editExpense.category || 'General');
-      setExpenseDate(editExpense.expense_date ? toLocalDateInputValue(editExpense.expense_date) : '');
-      setNotes(editExpense.notes || '');
-      setSplitType(editExpense.split_type || 'equal');
-
-      // Payers
-      const pList = editExpense.payers || [];
-      if (pList.length > 1) {
-        setIsMultiplePayers(true);
-        const map = {};
-        let maxPaise = -1;
-        let primaryPayer = '';
-        pList.forEach((p) => {
-          const paise = Number(p.amountPaise);
-          map[p.userId] = (paise / 100).toString();
-          if (paise > maxPaise) {
-            maxPaise = paise;
-            primaryPayer = p.userId.toString();
-          }
-        });
-        setPayerAmounts(map);
-        if (primaryPayer) setSinglePayerId(primaryPayer);
-      } else if (pList.length === 1) {
-        setIsMultiplePayers(false);
-        const singleId = pList[0].userId.toString();
-        setSinglePayerId(singleId);
-        const map = {};
-        (groupMembers || []).forEach((m) => {
-          map[m.user_id] =
-            m.user_id.toString() === singleId
-              ? (Number(pList[0].amountPaise) / 100).toString()
-              : '';
-        });
-        setPayerAmounts(map);
-      } else {
-        setIsMultiplePayers(false);
-        if (groupMembers && groupMembers.length > 0) {
-          setSinglePayerId(groupMembers[0].user_id.toString());
-        }
-      }
-
-      // Participants
-      const partList = editExpense.participants || [];
-      const partIds = partList.map((pt) => pt.userId);
-      setSelectedParticipants(partIds);
-
-      if (editExpense.split_type === 'exact') {
-        const exactMap = {};
-        partList.forEach((pt) => {
-          exactMap[pt.userId] = (Number(pt.shareAmountPaise) / 100).toString();
-        });
-        setExactShares(exactMap);
-      } else if (editExpense.split_type === 'percentage') {
-        const pctMap = {};
-        partList.forEach((pt) => {
-          pctMap[pt.userId] = (Number(pt.shareValue) || 0).toString();
-        });
-        setPercentages(pctMap);
-      } else if (editExpense.split_type === 'shares') {
-        const shMap = {};
-        partList.forEach((pt) => {
-          shMap[pt.userId] = (Number(pt.shareValue) || 1).toString();
-        });
-        setShares(shMap);
-      } else if (editExpense.split_type === 'adjustment') {
-        const adjMap = {};
-        partList.forEach((pt) => {
-          adjMap[pt.userId] = (Number(pt.adjustmentPaise || 0) / 100).toString();
-        });
-        setAdjustments(adjMap);
-      }
-
-      if (editExpense.split_type === 'itemized' && editExpense.items && editExpense.items.length > 0) {
-        setItems(
-          editExpense.items.map((it) => ({
-            name: it.name || '',
-            amountINR: (Number(it.amountPaise) / 100).toString(),
-            assignedUserIds:
-              it.assignedUserIds && it.assignedUserIds.length > 0
-                ? it.assignedUserIds.map(Number)
-                : defaultMemberIds,
-          }))
-        );
-      } else {
-        setItems([
-          { name: '', amountINR: '', assignedUserIds: defaultMemberIds },
-        ]);
-      }
-    } else {
-      // Default creation state
-      setDescription('');
-      setAmountINR('');
-      setCategory('General');
-      setNotes('');
-      setExpenseDate(toLocalDateInputValue(new Date()));
-      setSplitType('equal');
-      setIsMultiplePayers(false);
-
-      if (groupMembers && groupMembers.length > 0) {
-        setSinglePayerId(groupMembers[0].user_id.toString());
-        setSelectedParticipants(groupMembers.map((m) => m.user_id));
-
-        const initialMap = {};
-        groupMembers.forEach((m) => {
-          initialMap[m.user_id] = '';
-        });
-        setPayerAmounts(initialMap);
-        setExactShares(initialMap);
-
-        const initialPct = {};
-        const evenPct = (100 / groupMembers.length).toFixed(2);
-        groupMembers.forEach((m) => {
-          initialPct[m.user_id] = evenPct;
-        });
-        setPercentages(initialPct);
-
-        const initialShares = {};
-        groupMembers.forEach((m) => {
-          initialShares[m.user_id] = '1';
-        });
-        setShares(initialShares);
-
-        const initialAdj = {};
-        groupMembers.forEach((m) => {
-          initialAdj[m.user_id] = '0';
-        });
-        setAdjustments(initialAdj);
-
-        setItems([
-          { name: '', amountINR: '', assignedUserIds: groupMembers.map((m) => m.user_id) },
-        ]);
-      }
-    }
-  }, [isOpen, editExpense, groupMembers]);
 
   const totalPaise = inrToPaise(amountINR);
 
@@ -489,14 +453,14 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
     }
 
     // Payer validation
-    let payloadPayers = [];
+    let payloadPayers;
     if (isMultiplePayers) {
       if (payerDifferencePaise !== 0) {
         setError(`Payer contributions do not match total amount (Difference: ₹${(payerDifferencePaise / 100).toFixed(2)})`);
         return;
       }
       payloadPayers = Object.entries(payerAmounts)
-        .filter(([_, amt]) => inrToPaise(amt) > 0)
+        .filter(([, amt]) => inrToPaise(amt) > 0)
         .map(([uid, amt]) => ({
           userId: Number(uid),
           amountPaise: inrToPaise(amt),

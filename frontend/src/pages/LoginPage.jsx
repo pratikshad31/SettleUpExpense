@@ -1,9 +1,9 @@
 // frontend/src/pages/LoginPage.jsx
 // User login page with quick demo account buttons, password recovery modal, and clear validation
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authState';
 import {
   ArrowRightLeft,
   Lock,
@@ -13,7 +13,6 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
-  HelpCircle,
   CheckCircle,
 } from 'lucide-react';
 import Modal from '../components/Modal';

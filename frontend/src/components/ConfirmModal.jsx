@@ -1,9 +1,9 @@
 // frontend/src/components/ConfirmModal.jsx
 // In-app modern confirmation & prompt dialog (replaces native browser window.confirm / window.prompt)
 
-import React, { useState, useEffect } from 'react';
+import { useRef } from 'react';
 import Modal from './Modal';
-import { AlertTriangle, Info, HelpCircle } from 'lucide-react';
+import { AlertTriangle, HelpCircle } from 'lucide-react';
 
 export default function ConfirmModal({
   isOpen,
@@ -18,18 +18,12 @@ export default function ConfirmModal({
   initialInputValue = '',
   loading = false,
 }) {
-  const [inputValue, setInputValue] = useState(initialInputValue);
-
-  useEffect(() => {
-    if (isOpen) {
-      setInputValue(initialInputValue);
-    }
-  }, [isOpen, initialInputValue]);
+  const inputRef = useRef(null);
 
   if (!isOpen) return null;
 
   const handleConfirm = () => {
-    onConfirm(inputPlaceholder !== null ? inputValue : undefined);
+    onConfirm(inputPlaceholder !== null ? inputRef.current?.value : undefined);
   };
 
   const isDanger = type === 'danger';
@@ -70,11 +64,12 @@ export default function ConfirmModal({
             {inputPlaceholder !== null && (
               <div style={{ marginTop: 14 }}>
                 <input
+                  key={initialInputValue}
                   type="text"
                   className="form-input"
                   placeholder={inputPlaceholder}
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
+                  defaultValue={initialInputValue}
+                  ref={inputRef}
                   autoFocus
                   style={{ width: '100%' }}
                 />

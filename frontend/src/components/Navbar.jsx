@@ -1,9 +1,8 @@
 // frontend/src/components/Navbar.jsx
 // App navigation header
 
-import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authState';
 import { Layers, User, LogOut, ArrowRightLeft } from 'lucide-react';
 
 export default function Navbar() {

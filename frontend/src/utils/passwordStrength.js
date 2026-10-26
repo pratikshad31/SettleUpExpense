@@ -59,7 +59,7 @@ export function getPasswordRuleChecks(password = '') {
     {
       id: 'special',
       label: 'At least 1 special character (!@#$%^&* etc.)',
-      met: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(pwd),
+      met: [..."!@#$%^&*()_+-=[]{};':\"\\|,.<>/?`~"].some((character) => pwd.includes(character)),
     },
     {
       id: 'notCommon',

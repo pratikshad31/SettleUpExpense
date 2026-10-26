@@ -1,7 +1,7 @@
 // frontend/src/components/UpiQrModal.jsx
 // Interactive UPI QR code scanner & payment launcher
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Modal from './Modal';
 import { Copy, Check, ExternalLink, AlertTriangle } from 'lucide-react';
@@ -12,7 +12,7 @@ export default function UpiQrModal({ isOpen, onClose, details }) {
 
   if (!details) return null;
 
-  const { recipientName, upiId, amountPaise, upiUri, note } = details;
+  const { recipientName, upiId, amountPaise, upiUri } = details;
 
   const handleCopyUpi = () => {
     if (upiId) {
