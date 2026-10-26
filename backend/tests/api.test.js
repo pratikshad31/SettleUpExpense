@@ -126,7 +126,7 @@ describe('API Integration Test Suite', () => {
         .post(`/api/groups/${flatGroupId}/leave`)
         .set('Authorization', `Bearer ${priyaToken}`);
 
-      assert.strictEqual(res.status, 400);
+      assert.strictEqual(res.status, 409);
       assert.match(res.body.error, /Cannot leave group/);
     });
   });

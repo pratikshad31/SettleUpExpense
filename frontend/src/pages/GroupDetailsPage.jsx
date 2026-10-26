@@ -139,7 +139,10 @@ export default function GroupDetailsPage() {
   const handleSaveExpense = async (payload) => {
     try {
       if (editingExpense) {
-        await api.put(`/expenses/${editingExpense.id}`, payload);
+        await api.put(`/expenses/${editingExpense.id}`, {
+          ...payload,
+          version: editingExpense.version,
+        });
         setToast({ message: 'Expense updated successfully!', type: 'success' });
       } else {
         await api.post(`/groups/${groupId}/expenses`, payload);

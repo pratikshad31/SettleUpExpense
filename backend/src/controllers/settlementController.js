@@ -124,7 +124,9 @@ async function createSettlement(req, res, next) {
 
       const membersRes = await client.query(
         `SELECT user_id FROM group_members
-         WHERE group_id = $1 AND user_id IN ($2, $3) AND status = 'active'`,
+         WHERE group_id = $1 AND user_id IN ($2, $3) AND status = 'active'
+         ORDER BY user_id ASC
+         FOR UPDATE`,
         [groupId, fromUserId, toUserId]
       );
       if (membersRes.rowCount < 2) {

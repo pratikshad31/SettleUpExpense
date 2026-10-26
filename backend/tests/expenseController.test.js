@@ -124,6 +124,7 @@ describe('Expense Controller (src/controllers/expenseController.js)', () => {
         user: user2,
         membership: { role: 'member' },
         body: {
+          version: 1,
           description: 'Member Updated Expense',
           amountINR: 600,
           splitType: 'equal',
@@ -138,13 +139,14 @@ describe('Expense Controller (src/controllers/expenseController.js)', () => {
       assert.strictEqual(Number(res.body.expense.total_amount_paise), 60000);
     });
 
-    it('should allow creator to update expense, incrementing version to 2', async () => {
+    it('should allow creator to update expense, incrementing version to 3', async () => {
       const req = {
         groupId: testGroup.id,
         params: { expenseId: createdExp.id },
         user: user1,
         membership: { role: 'owner' },
         body: {
+          version: 2,
           description: 'Updated Movie & Popcorn',
           amountINR: 750,
           splitType: 'equal',

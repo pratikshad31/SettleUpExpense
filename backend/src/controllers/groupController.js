@@ -2,8 +2,8 @@
 // Group lifecycle and member management controller
 
 const crypto = require('crypto');
-const { query, withTransaction } = require('../db');
-const { calculateBalancesAndOptimization } = require('../utils/optimizer');
+const { pool, query, withTransaction } = require('../db');
+const { getGroupFinancialSummary } = require('../utils/groupBalances');
 
 /**
  * Generate a random 8-character uppercase invite code
@@ -83,38 +83,7 @@ async function getUserGroups(req, res, next) {
 
     const groupsWithBalance = await Promise.all(
       groupsRes.rows.map(async (grp) => {
-        // Calculate user balance for each group
-        const expResult = await query(
-          `SELECT e.id, e.total_amount_paise, e.is_voided,
-                  (SELECT json_agg(json_build_object('user_id', ep.user_id, 'amount_paise', ep.amount_paise))
-                   FROM expense_payers ep WHERE ep.expense_id = e.id) AS payers,
-                  (SELECT json_agg(json_build_object('user_id', part.user_id, 'share_amount_paise', part.share_amount_paise))
-                   FROM expense_participants part WHERE part.expense_id = e.id) AS participants
-           FROM expenses e
-           WHERE e.group_id = $1 AND e.is_voided = false`,
-          [grp.id]
-        );
-
-        const stResult = await query(
-          `SELECT from_user, to_user, amount_paise, status
-           FROM settlements
-           WHERE group_id = $1 AND status = 'confirmed'`,
-          [grp.id]
-        );
-
-        const membersResult = await query(
-          `SELECT u.id, u.name, u.upi_id
-           FROM group_members gm
-           JOIN users u ON u.id = gm.user_id
-           WHERE gm.group_id = $1`,
-          [grp.id]
-        );
-
-        const { balances } = calculateBalancesAndOptimization(
-          expResult.rows,
-          stResult.rows,
-          membersResult.rows
-        );
+        const { balances } = await getGroupFinancialSummary(pool, grp.id);
 
         const myBal = balances.find((b) => b.userId === userId);
 
@@ -354,80 +323,77 @@ async function leaveGroup(req, res, next) {
     const groupId = req.groupId;
     const userId = req.user.id;
 
-    // Check balance
-    const expResult = await query(
-      `SELECT e.id, e.total_amount_paise, e.is_voided,
-              (SELECT json_agg(json_build_object('user_id', ep.user_id, 'amount_paise', ep.amount_paise))
-               FROM expense_payers ep WHERE ep.expense_id = e.id) AS payers,
-              (SELECT json_agg(json_build_object('user_id', part.user_id, 'share_amount_paise', part.share_amount_paise))
-               FROM expense_participants part WHERE part.expense_id = e.id) AS participants
-       FROM expenses e
-       WHERE e.group_id = $1 AND e.is_voided = false`,
-      [groupId]
-    );
-
-    const stResult = await query(
-      `SELECT from_user, to_user, amount_paise, status
-       FROM settlements
-       WHERE group_id = $1 AND status = 'confirmed'`,
-      [groupId]
-    );
-
-    const membersResult = await query(
-      `SELECT u.id, u.name, u.upi_id
-       FROM group_members gm
-       JOIN users u ON u.id = gm.user_id
-       WHERE gm.group_id = $1`,
-      [groupId]
-    );
-
-    const { balances } = calculateBalancesAndOptimization(
-      expResult.rows,
-      stResult.rows,
-      membersResult.rows
-    );
-
-    const myBal = balances.find((b) => b.userId === userId);
-    const netPaise = myBal ? myBal.netBalancePaise : 0;
-
-    if (netPaise !== 0) {
-      const netINR = (Math.abs(netPaise) / 100).toFixed(2);
-      if (netPaise < 0) {
-        return res.status(400).json({
-          error: `Cannot leave group: You currently owe ₹${netINR}. Please settle all outstanding debts before leaving.`,
-        });
-      } else {
-        return res.status(400).json({
-          error: `Cannot leave group: You are still owed ₹${netINR}. Please settle up or confirm payments before leaving.`,
-        });
-      }
-    }
-
-    // If owner, check if other members exist
-    if (req.membership.role === 'owner') {
-      const otherMembers = await query(
-        `SELECT user_id FROM group_members 
-         WHERE group_id = $1 AND user_id != $2 AND status = 'active'`,
-        [groupId, userId]
-      );
-      if (otherMembers.rowCount > 0) {
-        // Automatically promote the earliest member to owner
-        const nextOwnerId = otherMembers.rows[0].user_id;
-        await query(
-          `UPDATE group_members SET role = 'owner' WHERE group_id = $1 AND user_id = $2`,
-          [groupId, nextOwnerId]
-        );
-      }
-    }
-
-    // Set membership to inactive (preserves historical financial records)
     await withTransaction(async (client) => {
-      await client.query(
-        `UPDATE group_members 
-         SET status = 'inactive', updated_at = CURRENT_TIMESTAMP 
-         WHERE group_id = $1 AND user_id = $2`,
-        [groupId, userId]
+      // Lock membership rows in stable user order, then lock pending settlements by ID.
+      const memberRows = await client.query(
+        `SELECT id, user_id, role, status
+         FROM group_members
+         WHERE group_id = $1
+         ORDER BY user_id ASC, id ASC
+         FOR UPDATE`,
+        [groupId]
       );
+      const currentMembership = memberRows.rows.find((row) => Number(row.user_id) === Number(userId));
+      if (!currentMembership || currentMembership.status !== 'active') {
+        throw { status: 403, message: 'Your membership in this group is inactive' };
+      }
+
+      const pendingRows = await client.query(
+        `SELECT id, from_user, to_user, status
+         FROM settlements
+         WHERE group_id = $1 AND status IN ('pending', 'marked_paid')
+         ORDER BY id ASC
+         FOR UPDATE`,
+        [groupId]
+      );
+      const myPendingCount = pendingRows.rows.filter(
+        (settlement) => Number(settlement.from_user) === Number(userId)
+          || Number(settlement.to_user) === Number(userId)
+      ).length;
+      if (myPendingCount > 0) {
+        throw {
+          status: 409,
+          message: `Cannot leave group: you have ${myPendingCount} pending settlement(s).`,
+        };
+      }
+
+      const { balances } = await getGroupFinancialSummary(client, groupId);
+      const myBalance = balances.find((balance) => Number(balance.userId) === Number(userId));
+      const netPaise = myBalance ? myBalance.netBalancePaise : 0;
+      if (netPaise !== 0) {
+        throw {
+          status: 409,
+          message: `Cannot leave group: your net balance is ${netPaise} paise. Settle up first.`,
+        };
+      }
+
+      await client.query(
+        `UPDATE group_members
+         SET status = 'inactive', updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [currentMembership.id]
+      );
+
+      if (currentMembership.role === 'owner') {
+        const nextOwner = await client.query(
+          `SELECT id
+           FROM group_members
+           WHERE group_id = $1 AND user_id <> $2 AND status = 'active'
+           ORDER BY joined_at ASC, id ASC
+           LIMIT 1
+           FOR UPDATE`,
+          [groupId, userId]
+        );
+        if (nextOwner.rowCount > 0) {
+          await client.query(
+            `UPDATE group_members
+             SET role = 'owner', updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1`,
+            [nextOwner.rows[0].id]
+          );
+        }
+      }
+
       await client.query(
         `INSERT INTO activity_logs (group_id, actor_id, entity_type, entity_id, action, metadata)
          VALUES ($1, $2, 'membership', $3, 'left', $4)`,
@@ -437,6 +403,9 @@ async function leaveGroup(req, res, next) {
 
     res.json({ message: 'You have left the group successfully.' });
   } catch (err) {
+    if ([403, 409].includes(err.status)) {
+      return res.status(err.status).json({ error: err.message });
+    }
     next(err);
   }
 }

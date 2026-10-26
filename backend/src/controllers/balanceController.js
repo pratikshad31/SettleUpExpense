@@ -1,50 +1,10 @@
 // backend/src/controllers/balanceController.js
 // Net balances, detailed person-to-person debts, and settlement optimization
 
-const { query } = require('../db');
-const { calculateBalancesAndOptimization } = require('../utils/optimizer');
+const { pool } = require('../db');
 const { calculateDetailedDebts } = require('../utils/debts');
 const { generateUpiUri } = require('../utils/upi');
-
-/**
- * Helper to fetch all raw group financial data
- */
-async function fetchGroupFinancialData(groupId) {
-  // 1. Fetch non-voided expenses with payers and participants
-  const expRes = await query(
-    `SELECT e.id, e.total_amount_paise, e.is_voided,
-            (SELECT json_agg(json_build_object('user_id', ep.user_id, 'amount_paise', ep.amount_paise))
-             FROM expense_payers ep WHERE ep.expense_id = e.id) AS payers,
-            (SELECT json_agg(json_build_object('user_id', part.user_id, 'share_amount_paise', part.share_amount_paise))
-             FROM expense_participants part WHERE part.expense_id = e.id) AS participants
-     FROM expenses e
-     WHERE e.group_id = $1 AND e.is_voided = false`,
-    [groupId]
-  );
-
-  // 2. Fetch confirmed settlements
-  const stRes = await query(
-    `SELECT id, from_user, to_user, amount_paise, status
-     FROM settlements
-     WHERE group_id = $1 AND status = 'confirmed'`,
-    [groupId]
-  );
-
-  // 3. Fetch all group members (including inactive to preserve historical records)
-  const membersRes = await query(
-    `SELECT u.id, u.name, u.email, u.upi_id, gm.status, gm.role
-     FROM group_members gm
-     JOIN users u ON u.id = gm.user_id
-     WHERE gm.group_id = $1`,
-    [groupId]
-  );
-
-  return {
-    expenses: expRes.rows,
-    settlements: stRes.rows,
-    members: membersRes.rows,
-  };
-}
+const { getGroupFinancialSummary } = require('../utils/groupBalances');
 
 /**
  * Get net balances and optimized settlement suggestions
@@ -52,13 +12,8 @@ async function fetchGroupFinancialData(groupId) {
 async function getGroupBalances(req, res, next) {
   try {
     const groupId = req.groupId;
-    const { expenses, settlements, members } = await fetchGroupFinancialData(groupId);
-
-    const { balances, suggestions, netSumPaise } = calculateBalancesAndOptimization(
-      expenses,
-      settlements,
-      members
-    );
+    const { expenses, settlements, balances, suggestions, netSumPaise } =
+      await getGroupFinancialSummary(pool, groupId);
 
     // Enrich suggestions with UPI URIs
     const enrichedSuggestions = suggestions.map((sug) => {
@@ -101,7 +56,7 @@ async function getGroupBalances(req, res, next) {
 async function getGroupDebts(req, res, next) {
   try {
     const groupId = req.groupId;
-    const { expenses, settlements, members } = await fetchGroupFinancialData(groupId);
+    const { expenses, settlements, members } = await getGroupFinancialSummary(pool, groupId);
 
     const memberMap = new Map();
     for (const m of members) {

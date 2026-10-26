@@ -367,6 +367,7 @@ async function updateExpense(req, res, next) {
     const expenseId = parseInt(req.params.expenseId, 10);
     const groupId = req.groupId;
     const {
+      version: expectedVersion,
       description,
       amountINR,
       amountPaise: rawAmountPaise,
@@ -381,82 +382,86 @@ async function updateExpense(req, res, next) {
       reason = 'Updated expense details',
     } = req.body;
 
-    const existingRes = await query('SELECT * FROM expenses WHERE id = $1 AND group_id = $2', [expenseId, groupId]);
-    if (existingRes.rowCount === 0) {
-      return res.status(404).json({ error: 'Expense not found' });
-    }
-
-    const currentExpense = existingRes.rows[0];
-    if (currentExpense.is_voided) {
-      return res.status(400).json({ error: 'Cannot update a voided expense' });
-    }
-
-    const totalPaise = rawAmountPaise !== undefined
-      ? parsePaise(rawAmountPaise, 'amountPaise')
-      : toPaise(amountINR, 'amountINR');
-
-    const membersRes = await query(
-      `SELECT user_id FROM group_members WHERE group_id = $1 AND status = 'active'`,
-      [groupId]
-    );
-    const activeMemberIds = new Set(membersRes.rows.map((r) => r.user_id));
-
-    let normalizedPayers = [];
-    if (!payers || payers.length === 0) {
-      normalizedPayers = [{ userId: currentExpense.created_by, amountPaise: totalPaise }];
-    } else {
-      normalizedPayers = validatePayers(payers, totalPaise, activeMemberIds);
-    }
-
-    // Verify all payers are active members (validatePayers enforces this for
-    // explicitly supplied payers; the defaulted payer must satisfy the same rule)
-    for (const p of normalizedPayers) {
-      if (!activeMemberIds.has(p.userId)) {
-        return res.status(400).json({ error: `Payer #${p.userId} is not an active member of this group` });
-      }
-    }
-
-    let calculatedParticipants = [];
-    let processedItems = [];
-
-    if (splitType === 'itemized') {
-      if (!Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ error: 'At least one item is required for itemized expense' });
-      }
-      processedItems = normalizeItems(items);
-
-      calculatedParticipants = calculateSplit('itemized', totalPaise, {
-        items: processedItems,
-        sharedTaxPaise: req.body.sharedTaxPaise === undefined
-          ? 0
-          : parseNonNegativePaise(req.body.sharedTaxPaise, 'sharedTaxPaise'),
-      }, [...activeMemberIds]);
-    } else {
-      calculatedParticipants = calculateSplit(
-        splitType,
-        totalPaise,
-        splitData,
-        participantIds || [...activeMemberIds]
-      );
-    }
-
-    // Verify all participants are active members (same rule as createExpense)
-    for (const p of calculatedParticipants) {
-      if (!activeMemberIds.has(p.userId)) {
-        return res.status(400).json({ error: `Participant #${p.userId} is not an active member of this group` });
-      }
-    }
-
-    const nextVersion = currentExpense.version + 1;
-
     const updatedExpense = await withTransaction(async (client) => {
-      // 1. Update expense row
+      const existingRes = await client.query(
+        'SELECT * FROM expenses WHERE id = $1 AND group_id = $2 FOR UPDATE',
+        [expenseId, groupId]
+      );
+      if (existingRes.rowCount === 0) {
+        throw { status: 404, message: 'Expense not found' };
+      }
+
+      const currentExpense = existingRes.rows[0];
+      if (currentExpense.is_voided) {
+        throw { status: 400, message: 'Cannot update a voided expense' };
+      }
+      if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+        throw { status: 400, message: 'version: the current expense version is required.' };
+      }
+      if (Number(expectedVersion) !== Number(currentExpense.version)) {
+        throw {
+          status: 409,
+          message: 'Expense was updated by another request. Reload and try again.',
+        };
+      }
+
+      const totalPaise = rawAmountPaise !== undefined
+        ? parsePaise(rawAmountPaise, 'amountPaise')
+        : toPaise(amountINR, 'amountINR');
+
+      const membersRes = await client.query(
+        `SELECT user_id FROM group_members WHERE group_id = $1 AND status = 'active'`,
+        [groupId]
+      );
+      const activeMemberIds = new Set(membersRes.rows.map((row) => row.user_id));
+
+      let normalizedPayers = [];
+      if (!payers || payers.length === 0) {
+        normalizedPayers = [{ userId: currentExpense.created_by, amountPaise: totalPaise }];
+      } else {
+        normalizedPayers = validatePayers(payers, totalPaise, activeMemberIds);
+      }
+      for (const payer of normalizedPayers) {
+        if (!activeMemberIds.has(payer.userId)) {
+          throw validationError(`Payer #${payer.userId} is not an active member of this group`);
+        }
+      }
+
+      let calculatedParticipants = [];
+      let processedItems = [];
+      if (splitType === 'itemized') {
+        if (!Array.isArray(items) || items.length === 0) {
+          throw validationError('At least one item is required for itemized expense');
+        }
+        processedItems = normalizeItems(items);
+        calculatedParticipants = calculateSplit('itemized', totalPaise, {
+          items: processedItems,
+          sharedTaxPaise: req.body.sharedTaxPaise === undefined
+            ? 0
+            : parseNonNegativePaise(req.body.sharedTaxPaise, 'sharedTaxPaise'),
+        }, [...activeMemberIds]);
+      } else {
+        calculatedParticipants = calculateSplit(
+          splitType,
+          totalPaise,
+          splitData,
+          participantIds || [...activeMemberIds]
+        );
+      }
+
+      for (const participant of calculatedParticipants) {
+        if (!activeMemberIds.has(participant.userId)) {
+          throw validationError(`Participant #${participant.userId} is not an active member of this group`);
+        }
+      }
+
+      const nextVersion = Number(currentExpense.version) + 1;
       const updateRes = await client.query(
-        `UPDATE expenses 
+        `UPDATE expenses
          SET description = $1, total_amount_paise = $2, category = $3, notes = $4,
              expense_date = COALESCE($5::date, CURRENT_DATE), split_type = $6,
              version = $7, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $8
+         WHERE id = $8 AND group_id = $9 AND version = $10
          RETURNING *`,
         [
           description.trim(),
@@ -467,81 +472,82 @@ async function updateExpense(req, res, next) {
           splitType,
           nextVersion,
           expenseId,
+          groupId,
+          currentExpense.version,
         ]
       );
-      const exp = updateRes.rows[0];
+      if (updateRes.rowCount === 0) {
+        throw {
+          status: 409,
+          message: 'Expense was updated by another request. Reload and try again.',
+        };
+      }
+      const expense = updateRes.rows[0];
 
-      // 2. Refresh payers
       await client.query('DELETE FROM expense_payers WHERE expense_id = $1', [expenseId]);
-      for (const p of normalizedPayers) {
+      for (const payer of normalizedPayers) {
         await client.query(
           `INSERT INTO expense_payers (expense_id, user_id, amount_paise)
            VALUES ($1, $2, $3)`,
-          [exp.id, p.userId, p.amountPaise]
+          [expense.id, payer.userId, payer.amountPaise]
         );
       }
 
-      // 3. Refresh participants
       await client.query('DELETE FROM expense_participants WHERE expense_id = $1', [expenseId]);
-      for (const p of calculatedParticipants) {
+      for (const participant of calculatedParticipants) {
         await client.query(
           `INSERT INTO expense_participants (expense_id, user_id, share_amount_paise, share_value, adjustment_paise)
            VALUES ($1, $2, $3, $4, $5)`,
-          [exp.id, p.userId, p.sharePaise, p.shareValue || 0, p.adjustmentPaise || 0]
+          [expense.id, participant.userId, participant.sharePaise, participant.shareValue || 0, participant.adjustmentPaise || 0]
         );
       }
 
-      // 4. Refresh items
       await client.query('DELETE FROM expense_items WHERE expense_id = $1', [expenseId]);
       if (splitType === 'itemized' && processedItems.length > 0) {
         for (const item of processedItems) {
           await client.query(
             `INSERT INTO expense_items (expense_id, item_name, amount_paise, assigned_user_ids)
              VALUES ($1, $2, $3, $4)`,
-            [exp.id, item.name, item.amountPaise, JSON.stringify(item.assignedUserIds)]
+            [expense.id, item.name, item.amountPaise, JSON.stringify(item.assignedUserIds)]
           );
         }
       }
 
-      // 5. Save version snapshot
       const snapshot = {
-        expense: exp,
+        expense,
         payers: normalizedPayers,
         participants: calculatedParticipants,
         items: processedItems,
       };
-
       await client.query(
         `INSERT INTO expense_versions (expense_id, version, snapshot, modified_by, reason)
          VALUES ($1, $2, $3, $4, $5)`,
-        [exp.id, nextVersion, JSON.stringify(snapshot), req.user.id, reason]
+        [expense.id, nextVersion, JSON.stringify(snapshot), req.user.id, reason]
       );
-
-      // 6. Log activity
       await client.query(
         `INSERT INTO activity_logs (group_id, actor_id, entity_type, entity_id, action, metadata)
          VALUES ($1, $2, 'expense', $3, 'updated', $4)`,
         [
           groupId,
           req.user.id,
-          exp.id,
+          expense.id,
           JSON.stringify({
-            description: exp.description,
-            amountPaise: exp.total_amount_paise,
+            description: expense.description,
+            amountPaise: expense.total_amount_paise,
             version: nextVersion,
             reason,
           }),
         ]
       );
 
-      return exp;
+      return expense;
     });
 
-    res.json({
-      message: 'Expense updated successfully',
-      expense: updatedExpense,
-    });
+    res.json({ message: 'Expense updated successfully', expense: updatedExpense });
   } catch (err) {
+    if ([400, 404, 409].includes(err.status)) {
+      return res.status(err.status).json({ error: err.message });
+    }
     next(err);
   }
 }
