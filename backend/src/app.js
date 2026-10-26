@@ -15,6 +15,7 @@ const settlementRoutes = require('./routes/settlementRoutes');
 const userRoutes = require('./routes/userRoutes');
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Security and utility middleware
 const allowedOrigins = new Set(
