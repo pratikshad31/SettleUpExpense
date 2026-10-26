@@ -416,11 +416,24 @@ describe('API Integration Test Suite', () => {
           .send({
             description: 'Maximum allowed paise expense',
             amountPaise: 1000000000,
-            participantIds: [1, 2],
+            payers: [{ userId: 2, amountPaise: 1000000000 }],
+            participantIds: [1],
           });
         trackCreatedId(maxExpense, expenseIds, 'expense');
         assert.equal(maxExpense.status, 201);
         assert.equal(Number(maxExpense.body.expense.total_amount_paise), 1000000000);
+
+        const additionalMaxDebt = await request(app)
+          .post(`/api/groups/${flatGroupId}/expenses`)
+          .set('Authorization', `Bearer ${aaravToken}`)
+          .send({
+            description: 'Additional debt for maximum settlement validation',
+            amountPaise: 1000000000,
+            payers: [{ userId: 2, amountPaise: 1000000000 }],
+            participantIds: [1],
+          });
+        trackCreatedId(additionalMaxDebt, expenseIds, 'expense');
+        assert.equal(additionalMaxDebt.status, 201);
 
         const maxSettlement = await request(app)
           .post(`/api/groups/${flatGroupId}/settlements`)

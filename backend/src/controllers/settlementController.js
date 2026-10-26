@@ -5,6 +5,76 @@ const { query, withTransaction } = require('../db');
 const { toPaise } = require('../utils/money');
 const { generateUpiUri } = require('../utils/upi');
 const { parsePaise } = require('../utils/validators');
+const { calculateDetailedDebts } = require('../utils/debts');
+const { calculateBalancesAndOptimization } = require('../utils/optimizer');
+
+async function getPairwiseAvailableLimit(client, groupId, payerId, receiverId, excludeSettlementId = null) {
+  const expensesRes = await client.query(
+    `SELECT e.id, e.total_amount_paise, e.is_voided,
+            (SELECT COALESCE(json_agg(json_build_object('user_id', ep.user_id, 'amount_paise', ep.amount_paise)), '[]'::json)
+             FROM expense_payers ep WHERE ep.expense_id = e.id) AS payers,
+            (SELECT COALESCE(json_agg(json_build_object('user_id', part.user_id, 'share_amount_paise', part.share_amount_paise)), '[]'::json)
+             FROM expense_participants part WHERE part.expense_id = e.id) AS participants
+     FROM expenses e
+     WHERE e.group_id = $1 AND e.is_voided = false`,
+    [groupId]
+  );
+  const confirmedRes = await client.query(
+    `SELECT id, from_user, to_user, amount_paise, status
+     FROM settlements
+     WHERE group_id = $1 AND status = 'confirmed'`,
+    [groupId]
+  );
+  const membersRes = await client.query(
+    `SELECT u.id, u.name, u.upi_id
+     FROM group_members gm
+     JOIN users u ON u.id = gm.user_id
+     WHERE gm.group_id = $1`,
+    [groupId]
+  );
+  // marked_paid still does not affect balances, so reserve it until the receiver confirms.
+  const pendingRes = await client.query(
+    `SELECT COALESCE(SUM(amount_paise), 0)::bigint AS amount_paise
+     FROM settlements
+     WHERE group_id = $1
+       AND from_user = $2
+       AND to_user = $3
+       AND status IN ('pending', 'marked_paid')
+       AND ($4::integer IS NULL OR id <> $4)`,
+    [groupId, payerId, receiverId, excludeSettlementId]
+  );
+
+  const expenses = expensesRes.rows;
+  const confirmedSettlements = confirmedRes.rows;
+  const detailedDebt = calculateDetailedDebts(expenses, confirmedSettlements)
+    .find((debt) => debt.fromUser === Number(payerId) && debt.toUser === Number(receiverId));
+  const debtPaise = detailedDebt ? detailedDebt.amountPaise : 0;
+
+  const { balances, suggestions } = calculateBalancesAndOptimization(
+    expenses,
+    confirmedSettlements,
+    membersRes.rows
+  );
+  const payerBalance = balances.find((balance) => balance.userId === Number(payerId));
+  const payerNetOwedPaise = Math.max(0, -(payerBalance?.netBalancePaise || 0));
+  const matchingSuggestion = suggestions.find(
+    (suggestion) => suggestion.fromUser === Number(payerId) && suggestion.toUser === Number(receiverId)
+  );
+
+  // The UI can prefill optimizer suggestions. Honor only this exact pair's suggestion,
+  // capped by the payer's total net amount owed in the group.
+  const suggestedDebtPaise = matchingSuggestion
+    ? Math.min(matchingSuggestion.amountPaise, payerNetOwedPaise)
+    : 0;
+  const outstandingDebtPaise = Math.max(debtPaise, suggestedDebtPaise);
+  const pendingPaise = Number(pendingRes.rows[0].amount_paise);
+
+  return {
+    outstandingDebtPaise,
+    pendingPaise,
+    availablePaise: Math.max(0, outstandingDebtPaise - pendingPaise),
+  };
+}
 
 /**
  * Propose or record a settlement payment
@@ -37,26 +107,41 @@ async function createSettlement(req, res, next) {
       ? parsePaise(rawAmountPaise, 'amountPaise')
       : toPaise(amountINR, 'amountINR');
 
-    // Verify both users are active group members
-    const membersRes = await query(
-      `SELECT user_id FROM group_members WHERE group_id = $1 AND user_id IN ($2, $3) AND status = 'active'`,
-      [groupId, fromUserId, toUserId]
-    );
-
-    if (membersRes.rowCount < 2) {
-      return res.status(400).json({ error: 'Both payer and recipient must be active members of the group' });
-    }
-
     // Only the person who owes the money (the payer) can settle their debt
     if (fromUserId !== req.user.id) {
       return res.status(403).json({ error: 'You can only settle your own debts' });
     }
 
-    // When payer records a payment, status must always be set to PENDING
-    const initialStatus = 'pending';
-
-    // Insert settlement inside a transaction
+    // Validate and insert under a per-pair transaction lock so concurrent proposals
+    // cannot reserve more than the available debt.
     const savedSettlement = await withTransaction(async (client) => {
+      const smallerUserId = Math.min(fromUserId, toUserId);
+      const largerUserId = Math.max(fromUserId, toUserId);
+      await client.query(
+        `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
+        [`settlement:${groupId}:${smallerUserId}:${largerUserId}`]
+      );
+
+      const membersRes = await client.query(
+        `SELECT user_id FROM group_members
+         WHERE group_id = $1 AND user_id IN ($2, $3) AND status = 'active'`,
+        [groupId, fromUserId, toUserId]
+      );
+      if (membersRes.rowCount < 2) {
+        throw { status: 400, message: 'Both payer and recipient must be active members of the group' };
+      }
+
+      const limit = await getPairwiseAvailableLimit(client, groupId, fromUserId, toUserId);
+      if (limit.outstandingDebtPaise === 0) {
+        throw { status: 400, message: 'amount: you do not owe this member anything in this group.' };
+      }
+      if (amountPaise > limit.availablePaise) {
+        throw {
+          status: 400,
+          message: `amount: ${amountPaise} exceeds the outstanding debt of ${limit.outstandingDebtPaise} (pending settlements reserve ${limit.pendingPaise}). Maximum allowed: ${limit.availablePaise}.`,
+        };
+      }
+
       const result = await client.query(
         `INSERT INTO settlements 
          (group_id, created_by, from_user, to_user, amount_paise, status, payment_method, reference_id, notes, confirmed_at, confirmed_by)
@@ -234,6 +319,20 @@ async function confirmSettlement(req, res, next) {
 
       if (Number(st.to_user) !== Number(req.user.id)) {
         throw { status: 403, message: 'Only the receiver can confirm this payment' };
+      }
+
+      const limit = await getPairwiseAvailableLimit(
+        client,
+        groupId,
+        Number(st.from_user),
+        Number(st.to_user),
+        settlementId
+      );
+      if (Number(st.amount_paise) > limit.availablePaise) {
+        throw {
+          status: 409,
+          message: `Settlement amount ${st.amount_paise} exceeds the current available debt of ${limit.availablePaise} paise.`,
+        };
       }
 
       const prevStatus = st.status;

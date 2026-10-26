@@ -9,6 +9,7 @@ const { pool, query } = require('../src/db');
 describe('Idempotency', () => {
   let payerA;
   let payerB;
+  let payerC;
   let groupId;
   let tokenA;
   let tokenB;
@@ -28,6 +29,7 @@ describe('Idempotency', () => {
 
     payerA = await createUser('A');
     payerB = await createUser('B');
+    payerC = await createUser('C');
     const group = await query(
       `INSERT INTO groups (name, invite_code, created_by)
        VALUES ($1, $2, $3) RETURNING id`,
@@ -37,8 +39,37 @@ describe('Idempotency', () => {
     await query(
       `INSERT INTO group_members (group_id, user_id, role, status) VALUES
        ($1, $2, 'owner', 'active'),
-       ($1, $3, 'member', 'active')`,
-      [groupId, payerA.id, payerB.id]
+       ($1, $3, 'member', 'active'),
+       ($1, $4, 'member', 'active')`,
+      [groupId, payerA.id, payerB.id, payerC.id]
+    );
+
+    const debtToA = await query(
+      `INSERT INTO expenses (group_id, created_by, description, total_amount_paise, split_type)
+       VALUES ($1, $2, $3, 100000, 'exact') RETURNING id`,
+      [groupId, payerB.id, `F6 debt to A ${uniqueTag}`]
+    );
+    await query(
+      'INSERT INTO expense_payers (expense_id, user_id, amount_paise) VALUES ($1, $2, 100000)',
+      [debtToA.rows[0].id, payerB.id]
+    );
+    await query(
+      'INSERT INTO expense_participants (expense_id, user_id, share_amount_paise) VALUES ($1, $2, 100000)',
+      [debtToA.rows[0].id, payerA.id]
+    );
+
+    const debtToB = await query(
+      `INSERT INTO expenses (group_id, created_by, description, total_amount_paise, split_type)
+       VALUES ($1, $2, $3, 100000, 'exact') RETURNING id`,
+      [groupId, payerC.id, `F6 debt to B ${uniqueTag}`]
+    );
+    await query(
+      'INSERT INTO expense_payers (expense_id, user_id, amount_paise) VALUES ($1, $2, 100000)',
+      [debtToB.rows[0].id, payerC.id]
+    );
+    await query(
+      'INSERT INTO expense_participants (expense_id, user_id, share_amount_paise) VALUES ($1, $2, 100000)',
+      [debtToB.rows[0].id, payerB.id]
     );
 
     tokenA = jwt.sign({ userId: payerA.id }, JWT_SECRET, { expiresIn: '1h' });
@@ -119,7 +150,7 @@ describe('Idempotency', () => {
     const key = `F6-settlement-two-users-${uniqueTag}`;
     const first = await settlementPost(tokenA, payerA.id, payerB.id, key, { notes: `${key}-a` });
     await waitForRecord(key, payerA.id);
-    const second = await settlementPost(tokenB, payerB.id, payerA.id, key, { notes: `${key}-b` });
+    const second = await settlementPost(tokenB, payerB.id, payerC.id, key, { notes: `${key}-b` });
     assert.equal(first.status, 201);
     assert.equal(second.status, 201);
     assert.notEqual(first.body.settlement.id, second.body.settlement.id);

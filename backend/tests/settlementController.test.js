@@ -38,6 +38,21 @@ describe('Settlement Controller (src/controllers/settlementController.js)', () =
        ($1, $4, 'member', 'active')`,
       [testGroup.id, payerUser.id, recipientUser.id, thirdUser.id]
     );
+
+    const debtExpense = await query(
+      `INSERT INTO expenses (group_id, created_by, description, total_amount_paise, split_type)
+       VALUES ($1, $2, 'Settlement controller fixture debt', 1000000, 'exact') RETURNING id`,
+      [testGroup.id, recipientUser.id]
+    );
+    await query(
+      'INSERT INTO expense_payers (expense_id, user_id, amount_paise) VALUES ($1, $2, 1000000)',
+      [debtExpense.rows[0].id, recipientUser.id]
+    );
+    await query(
+      `INSERT INTO expense_participants (expense_id, user_id, share_amount_paise)
+       VALUES ($1, $2, 1000000)`,
+      [debtExpense.rows[0].id, payerUser.id]
+    );
   });
 
   after(async () => {
