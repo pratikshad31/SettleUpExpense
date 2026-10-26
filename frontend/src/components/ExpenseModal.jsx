@@ -18,11 +18,29 @@ const CATEGORIES = [
   'Other',
 ];
 
+// Format a date as YYYY-MM-DD for a <input type="date"> using the user's LOCAL timezone.
+// expense_date is a DATE column that serialises as the previous UTC day (for IST,
+// 2026-10-18 becomes "2026-10-17T18:30:00.000Z"), so slicing the ISO string shifted
+// every edited expense back by one day.
+function toLocalDateInputValue(value) {
+  const d = value instanceof Date ? value : new Date(value);
+  if (isNaN(d.getTime())) return '';
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+// The part of the expense total the items do not cover, as an INR string for an input.
+function remainderToINR(totalPaise, itemsSumPaise) {
+  const remainder = totalPaise - itemsSumPaise;
+  return remainder > 0 ? (remainder / 100).toString() : '0';
+}
+
 export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, editExpense = null }) {
   const [description, setDescription] = useState('');
   const [amountINR, setAmountINR] = useState('');
   const [category, setCategory] = useState('General');
-  const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
+  const [expenseDate, setExpenseDate] = useState(toLocalDateInputValue(new Date()));
   const [notes, setNotes] = useState('');
   const [editReason, setEditReason] = useState('Updated expense');
 
@@ -43,6 +61,11 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
   const [items, setItems] = useState([
     { name: '', amountINR: '', assignedUserIds: [] },
   ]);
+  // Shared tax / delivery fee for itemized splits. Items may legitimately sum to less
+  // than the expense total (see seed.js expense 6: items 2150 + shared tax 200 = 2350);
+  // backend utils/splits.js distributes that remainder across participants. null = derive
+  // from the unallocated remainder; a string = the user's own value.
+  const [sharedTaxOverride, setSharedTaxOverride] = useState(null);
 
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -51,6 +74,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
   useEffect(() => {
     if (!isOpen) return;
     setError('');
+    setSharedTaxOverride(null);
 
     const defaultMemberIds = (groupMembers || []).map((m) => Number(m.user_id));
 
@@ -58,7 +82,8 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
       setDescription(editExpense.description);
       setAmountINR((Number(editExpense.total_amount_paise) / 100).toString());
       setCategory(editExpense.category || 'General');
-      setExpenseDate(editExpense.expense_date ? editExpense.expense_date.split('T')[0] : '');
+      setExpenseDate(editExpense.expense_date ? toLocalDateInputValue(editExpense.expense_date) : '');
+      setNotes(editExpense.notes || '');
       setSplitType(editExpense.split_type || 'equal');
 
       // Payers
@@ -149,7 +174,8 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
       setDescription('');
       setAmountINR('');
       setCategory('General');
-      setExpenseDate(new Date().toISOString().split('T')[0]);
+      setNotes('');
+      setExpenseDate(toLocalDateInputValue(new Date()));
       setSplitType('equal');
       setIsMultiplePayers(false);
 
@@ -191,6 +217,19 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
   }, [isOpen, editExpense, groupMembers]);
 
   const totalPaise = inrToPaise(amountINR);
+
+  // Derived during render rather than synced in an effect: whatever the items do not
+  // cover is the shared tax/fee — exactly the rule backend utils/splits.js applies —
+  // so editing an item amount updates it immediately with no cascading render. The
+  // user's own typed value takes precedence until the modal is reopened.
+  const autoSharedTaxINR =
+    splitType === 'itemized' && totalPaise > 0
+      ? remainderToINR(
+          totalPaise,
+          items.reduce((acc, it) => acc + inrToPaise(it.amountINR), 0)
+        )
+      : '0';
+  const sharedTaxINR = sharedTaxOverride ?? autoSharedTaxINR;
 
   // Payer calculation
   const totalAssignedPayersPaise = isMultiplePayers
@@ -260,13 +299,18 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
     };
   } else if (splitType === 'itemized') {
     const sumItemsPaise = items.reduce((acc, it) => acc + inrToPaise(it.amountINR), 0);
-    const diff = totalPaise - sumItemsPaise;
+    const sharedTaxPaise = inrToPaise(sharedTaxINR);
+    const diff = totalPaise - (sumItemsPaise + sharedTaxPaise);
     splitValidation = {
-      valid: totalPaise > 0 && diff === 0 && items.length > 0,
+      valid: totalPaise > 0 && items.length > 0 && sharedTaxPaise >= 0 && diff === 0,
       diffPaise: diff,
       message:
-        diff === 0
-          ? 'Itemized total matches expense total'
+        sharedTaxPaise < 0
+          ? 'Shared tax / fee cannot be negative'
+          : diff === 0
+          ? sharedTaxPaise > 0
+            ? `Items + shared tax of ₹${(sharedTaxPaise / 100).toFixed(2)} equal the total`
+            : 'Itemized total matches expense total'
           : diff > 0
           ? `₹${(diff / 100).toFixed(2)} remaining to assign`
           : `₹${(Math.abs(diff) / 100).toFixed(2)} over total`,
@@ -514,7 +558,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
               ? it.assignedUserIds.map(Number)
               : (groupMembers || []).map((m) => Number(m.user_id)),
         })),
-        sharedTaxPaise: 0,
+        sharedTaxPaise: inrToPaise(sharedTaxINR),
       };
     }
 
@@ -525,6 +569,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
         amountPaise: totalPaise,
         category,
         expenseDate,
+        notes,
         splitType,
         payers: payloadPayers,
         splitData: payloadSplitData,
@@ -539,6 +584,14 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
       setSubmitting(false);
     }
   };
+
+  // Why the submit button is (or is not) clickable — surfaced in the footer so a
+  // disabled button never silently swallows the click.
+  const payerBlocked = isMultiplePayers && payerDifferencePaise !== 0;
+  const submitBlocked = !splitValidation.valid || payerBlocked;
+  const blockedReason = !splitValidation.valid
+    ? splitValidation.message
+    : `Payer contributions do not match the total (difference ₹${(Math.abs(payerDifferencePaise) / 100).toFixed(2)})`;
 
   return (
     <Modal
@@ -610,6 +663,19 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
                 onChange={(e) => setExpenseDate(e.target.value)}
               />
             </div>
+          </div>
+
+          {/* Section: Notes */}
+          <div className="form-group">
+            <label className="form-label">Notes</label>
+            <textarea
+              className="form-textarea"
+              rows="3"
+              placeholder="Optional — receipt link, context, or how the split was agreed"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+            <div className="form-helper">Visible to everyone in the group. Leave blank for none.</div>
           </div>
 
           {/* Section: Who Paid? */}
@@ -1123,6 +1189,39 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
                     </div>
                   </div>
                 ))}
+
+                {/* Shared tax / delivery fee: the remainder when items sum to less than the total */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    marginTop: 4,
+                    paddingTop: 10,
+                    borderTop: '1px solid var(--border-light)',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Shared tax / delivery fee</div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                      Distributed across participants along with the items above.
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <IndianRupee size={14} style={{ color: 'var(--text-muted)' }} />
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="form-input"
+                      aria-label="Shared tax or delivery fee"
+                      value={sharedTaxINR}
+                      onChange={(e) => setSharedTaxOverride(e.target.value)}
+                      style={{ width: 130 }}
+                    />
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -1144,13 +1243,35 @@ export default function ExpenseModal({ isOpen, onClose, onSave, groupMembers, ed
         </div>
 
         <div className="modal-footer">
+          <div
+            style={{ flex: '1 1 auto', display: 'flex', alignItems: 'center', minWidth: 0 }}
+            role="status"
+            aria-live="polite"
+          >
+            {submitBlocked && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: 'var(--warning)',
+                  minWidth: 0,
+                }}
+              >
+                <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{blockedReason}</span>
+              </span>
+            )}
+          </div>
           <button type="button" onClick={onClose} className="btn btn-secondary" disabled={submitting}>
             Cancel
           </button>
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={submitting || !splitValidation.valid || (isMultiplePayers && payerDifferencePaise !== 0)}
+            disabled={submitting || submitBlocked}
           >
             {submitting ? 'Saving...' : editExpense ? 'Update Expense' : 'Create Expense'}
           </button>
