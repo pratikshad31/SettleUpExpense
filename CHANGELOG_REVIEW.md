@@ -2,6 +2,7 @@
 
 | Finding | Status | Commit hash | Test name(s) |
 |---|---|---|---|
+| F1 | DONE | `56a4a64ec653031e11585f8f04db40af9ea2a753` | `should throw when calculated balances violate the zero-sum invariant`; `optimizer.js` invariant now throws instead of warning |
 | F2 | DONE | `241319b9e5e9c0cf19a73c13be5e8b6d14fff736` | `app refuses to boot when JWT_SECRET is missing`; `app refuses to boot when JWT_SECRET is shorter than 32 characters`; auth controller and middleware tests |
 | F3 | DONE | `6568f6e9d2ab965e0c0ceaa7711b7d7dabf957d4` | `Paise input validation`; `rejects invalid paise on expense and settlement creation and accepts the configured maximum`; exact split and itemized split paise validation; INR conversion validation |
 | F4 | DONE | `c84abe9b7b080d86855174aab841c8e2e03358a0` | `matches detailed debt net to balance net for 6000 seeded multi-payer expenses` (seed `0xF4A2026`); includes A=1 paisa, B=99 paise, equal 3-way split |
@@ -21,3 +22,5 @@ F12 decisions: all five PostgreSQL settings are required from the environment, w
 E2/E7/E10 decisions: unknown valid emails perform one bcrypt comparison against a process-local dummy hash generated at cost 10, matching the work done for an existing account. The request guard rejects non-object JSON and null bytes recursively. Unicode remains valid in text fields; the emoji regression exercises an invalid email and verifies it returns a clean 4xx.
 
 Backend verification after E2, E7, and E10: `npm run test:unit` (52 passed, 0 failed, 0 cancelled), `npm run test:random` (2 passed, 0 failed, 0 cancelled), and `npm test` (186 passed, 0 failed, 0 cancelled). Frontend verification previously recorded after F8: `npm test` (8 passed) and `npm run build` succeeded.
+
+Final verification after `Fix-final-1`: backend `npm run test:unit` (53 passed), `npm run test:random` (2 passed; seed `0xf4a2026`), and `npm test` (187 passed, 0 failed, 0 cancelled); the freshly recreated database also passed `npm test` (187 passed). Frontend `npm test` passed (8), `npm run build` succeeded, and `npm run lint` reported 0 errors. Backend and frontend `npm audit` each found 0 vulnerabilities. The curl smoke flow passed expense, settlement, privacy, invalid-money, zero-sum balance, and leave checks.
