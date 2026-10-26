@@ -1,0 +1,12 @@
+# Project rules (SettleUpExpense: Node/Express + PostgreSQL backend, React frontend)
+- Money is always integer paise. Never use floats for money.
+- Make the smallest correct change. Do not rewrite code that already works.
+- Never delete or weaken an existing test. Never edit a test just to make it pass.
+- Never print or log secrets.
+- One git commit per finding, format "F<number>: <short description>".
+- Keep CHANGELOG_REVIEW.md updated: finding -> status -> commit hash -> test name.
+- Before fixing any item, check if it is already done. Fix only PARTIAL or NOT DONE items.
+- Write the regression test first, confirm it fails, then fix, then confirm it passes.
+- Never claim success without pasting real command output.
+- If something is ambiguous, pick the safest option and note it in CHANGELOG_REVIEW.md.
+- Context: a code review was done against commit 3c1e617. The findings are F1-F12, CI, and E1-E12.
