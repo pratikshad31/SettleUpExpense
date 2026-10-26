@@ -225,7 +225,7 @@ test.describe('leaving groups and ownership', () => {
     await balanceSnapshot(api, group.id, users[0]);
   });
 
-  test('leaving with a pending settlement is blocked with the pending count', async ({ page, browser, api, users, group }) => {
+  test('leaving with a pending settlement is blocked with the pending count', async ({ browser, api, users, group }) => {
     await seedTwoPersonDebt(api, group, users[0], users[1]);
     const payer = await makeUserPage(browser, users[1]);
     try {
