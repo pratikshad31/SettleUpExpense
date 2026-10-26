@@ -172,13 +172,20 @@ CREATE INDEX IF NOT EXISTS idx_activity_logs_group ON activity_logs(group_id, cr
 -- 12. Idempotency Records Table
 CREATE TABLE IF NOT EXISTS idempotency_records (
     id SERIAL PRIMARY KEY,
-    idempotency_key VARCHAR(100) NOT NULL UNIQUE,
+    idempotency_key VARCHAR(100) NOT NULL,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     route VARCHAR(255) NOT NULL,
-    response_code INTEGER NOT NULL,
-    response_body JSONB NOT NULL,
+    request_hash CHAR(64) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'in_progress' CHECK (status IN ('in_progress', 'complete')),
+    response_code INTEGER,
+    response_body JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CHECK (
+      (status = 'in_progress' AND response_code IS NULL AND response_body IS NULL)
+      OR (status = 'complete' AND response_code IS NOT NULL AND response_body IS NOT NULL)
+    )
 );
 
-CREATE INDEX IF NOT EXISTS idx_idempotency_key ON idempotency_records(idempotency_key);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_idempotency_user_route_key
+  ON idempotency_records(user_id, route, idempotency_key);

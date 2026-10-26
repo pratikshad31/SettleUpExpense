@@ -1,13 +1,17 @@
-// backend/src/middleware/idempotency.js
-// Idempotency protection middleware for payment and settlement requests
+// Idempotency protection middleware for mutation requests
 
+const crypto = require('crypto');
 const { query } = require('../db');
 
-/**
- * Idempotency middleware
- * Checks if the request contains an 'Idempotency-Key' or 'x-idempotency-key' header.
- * If cached, re-serves the stored response to prevent duplicate executions.
- */
+function requestHash(body) {
+  return crypto.createHash('sha256').update(JSON.stringify(body ?? null)).digest('hex');
+}
+
+function routeTemplate(req) {
+  const pathTemplate = typeof req.route?.path === 'string' ? req.route.path : req.path;
+  return `${req.method.toUpperCase()}${req.baseUrl || ''}${pathTemplate}`;
+}
+
 function idempotency(ttlHours = 24) {
   return async (req, res, next) => {
     const key = req.headers['idempotency-key'] || req.headers['x-idempotency-key'];
@@ -15,52 +19,104 @@ function idempotency(ttlHours = 24) {
       return next();
     }
 
-    const cleanKey = key.trim().substring(0, 100);
+    const cleanKey = key.trim();
+    if (!cleanKey) return next();
+    if (cleanKey.length > 100) {
+      return res.status(400).json({ error: 'Idempotency-Key must be 100 characters or fewer.' });
+    }
+
     const userId = req.user.id;
-    const route = req.originalUrl || req.url;
+    const route = routeTemplate(req);
+    const bodyHash = requestHash(req.body);
 
     try {
-      const existing = await query(
-        `SELECT response_code, response_body 
-         FROM idempotency_records 
-         WHERE idempotency_key = $1 AND user_id = $2 AND expires_at > CURRENT_TIMESTAMP`,
-        [cleanKey, userId]
-      );
+      let reservationId;
 
-      if (existing.rowCount > 0) {
+      // A unique scoped INSERT reserves the key before the controller can run.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const reserved = await query(
+          `INSERT INTO idempotency_records
+             (idempotency_key, user_id, route, request_hash, status, response_code, response_body, expires_at)
+           VALUES ($1, $2, $3, $4, 'in_progress', NULL, NULL,
+                   CURRENT_TIMESTAMP + ($5 * INTERVAL '1 hour'))
+           ON CONFLICT (user_id, route, idempotency_key) DO NOTHING
+           RETURNING id`,
+          [cleanKey, userId, route, bodyHash, ttlHours]
+        );
+
+        if (reserved.rowCount > 0) {
+          reservationId = reserved.rows[0].id;
+          break;
+        }
+
+        const existing = await query(
+          `SELECT id, request_hash, status, response_code, response_body,
+                  expires_at <= CURRENT_TIMESTAMP AS is_expired
+           FROM idempotency_records
+           WHERE user_id = $1 AND route = $2 AND idempotency_key = $3`,
+          [userId, route, cleanKey]
+        );
+
+        if (existing.rowCount === 0) continue;
         const record = existing.rows[0];
-        res.setHeader('X-Cache-Lookup', 'HIT');
-        const parsedBody = typeof record.response_body === 'string' 
-          ? JSON.parse(record.response_body) 
-          : record.response_body;
-        return res.status(record.response_code).json(parsedBody);
+
+        if (record.is_expired) {
+          await query(
+            'DELETE FROM idempotency_records WHERE id = $1 AND expires_at <= CURRENT_TIMESTAMP',
+            [record.id]
+          );
+          continue;
+        }
+
+        if (record.request_hash !== bodyHash) {
+          return res.status(422).json({ error: 'Idempotency-Key was already used with a different request body.' });
+        }
+
+        if (record.status === 'in_progress') {
+          return res.status(409).json({ error: 'A request with this Idempotency-Key is still in progress. Retry later.' });
+        }
+
+        if (record.status === 'complete') {
+          res.setHeader('X-Cache-Lookup', 'HIT');
+          const responseBody = typeof record.response_body === 'string'
+            ? JSON.parse(record.response_body)
+            : record.response_body;
+          return res.status(record.response_code).json(responseBody);
+        }
       }
 
-      // Monkey-patch res.json to capture output and save record
+      if (!reservationId) {
+        return res.status(409).json({ error: 'Could not reserve this Idempotency-Key. Retry later.' });
+      }
+
       const originalJson = res.json.bind(res);
+      let finalized = false;
       res.json = (body) => {
-        // Only cache successful or client error statuses (2xx, 4xx), not internal 5xx
-        if (res.statusCode < 500) {
-          query(
-            `INSERT INTO idempotency_records 
-             (idempotency_key, user_id, route, response_code, response_body, expires_at)
-             VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP + ($6 * INTERVAL '1 hour'))
-             ON CONFLICT (idempotency_key) DO UPDATE 
-             SET response_code = EXCLUDED.response_code, 
-                 response_body = EXCLUDED.response_body, 
-                 expires_at = EXCLUDED.expires_at`,
-            [cleanKey, userId, route, res.statusCode, JSON.stringify(body), ttlHours]
-          ).catch((err) => {
-            console.error('Failed to store idempotency record:', err.message);
-          });
-        }
-        return originalJson(body);
+        if (finalized) return originalJson(body);
+        finalized = true;
+        const responseCode = res.statusCode;
+
+        const finalizeReservation = responseCode >= 500
+          ? query('DELETE FROM idempotency_records WHERE id = $1', [reservationId])
+          : query(
+            `UPDATE idempotency_records
+             SET status = 'complete', response_code = $2, response_body = $3::jsonb,
+                 expires_at = CURRENT_TIMESTAMP + ($4 * INTERVAL '1 hour')
+             WHERE id = $1 AND status = 'in_progress'`,
+            [reservationId, responseCode, JSON.stringify(body ?? null), ttlHours]
+          );
+
+        return finalizeReservation
+          .catch(() => {
+            // Keep a failed completion write reserved until TTL expiry to prevent duplicate side effects.
+            console.error('Failed to finalize idempotency response.');
+          })
+          .then(() => originalJson(body));
       };
 
-      next();
+      return next();
     } catch (err) {
-      console.error('Idempotency middleware error:', err);
-      next();
+      return next(err);
     }
   };
 }

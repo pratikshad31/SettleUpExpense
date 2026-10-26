@@ -9,6 +9,8 @@ async function migrate() {
   console.log('--- Starting Database Migration ---');
   const schemaPath = path.join(__dirname, 'schema.sql');
   const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+  const idempotencyMigrationPath = path.join(__dirname, 'migrations', '001_idempotency_scope.sql');
+  const idempotencyMigrationSql = fs.readFileSync(idempotencyMigrationPath, 'utf8');
 
   try {
     // Check if older incompatible prototype tables exist
@@ -45,6 +47,8 @@ async function migrate() {
     await withTransaction(async (client) => {
       console.log('Executing schema.sql...');
       await client.query(schemaSql);
+      console.log('Executing 001_idempotency_scope.sql...');
+      await client.query(idempotencyMigrationSql);
     });
 
     console.log('✓ Migration completed successfully!');

@@ -28,7 +28,7 @@ router.post('/:groupId/leave', requireGroupMember, groupController.leaveGroup);
 
 // Expenses scoped to group
 router.get('/:groupId/expenses', requireGroupMember, expenseController.getGroupExpenses);
-router.post('/:groupId/expenses', requireGroupMember, expenseController.createExpense);
+router.post('/:groupId/expenses', requireGroupMember, idempotency(), expenseController.createExpense);
 
 // Balances, debts, and settlement suggestions
 router.get('/:groupId/balances', requireGroupMember, balanceController.getGroupBalances);
