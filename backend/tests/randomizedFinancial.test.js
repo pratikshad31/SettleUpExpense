@@ -15,6 +15,72 @@ function randomChoice(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+function createSeededRandom(seed) {
+  let state = seed >>> 0;
+  return function seededRandom() {
+    state = (state + 0x6D2B79F5) >>> 0;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seededInt(random, minimum, maximum) {
+  return minimum + Math.floor(random() * (maximum - minimum + 1));
+}
+
+function shuffled(values, random) {
+  const result = [...values];
+  for (let index = result.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+  }
+  return result;
+}
+
+function positivePartition(total, count, random) {
+  const values = [];
+  let remaining = total;
+  for (let index = 0; index < count; index++) {
+    if (index === count - 1) {
+      values.push(remaining);
+    } else {
+      const remainingCount = count - index - 1;
+      const value = seededInt(random, 1, remaining - remainingCount);
+      values.push(value);
+      remaining -= value;
+    }
+  }
+  return values;
+}
+
+function netByUserFromDetailedDebts(debts, memberIds) {
+  const netByUser = new Map(memberIds.map((userId) => [userId, 0]));
+  for (const debt of debts) {
+    netByUser.set(debt.fromUser, (netByUser.get(debt.fromUser) || 0) - debt.amountPaise);
+    netByUser.set(debt.toUser, (netByUser.get(debt.toUser) || 0) + debt.amountPaise);
+  }
+  return netByUser;
+}
+
+function assertDebtNetMatchesBalances(expenses, members, label, mismatches) {
+  const memberIds = members.map((member) => member.id);
+  const balances = calculateBalancesAndOptimization(expenses, [], members).balances;
+  const balanceByUser = new Map(balances.map((balance) => [balance.userId, balance.netBalancePaise]));
+  const memberMap = new Map(members.map((member) => [member.id, member.name]));
+  const debts = calculateDetailedDebts(expenses, [], memberMap);
+  const debtByUser = netByUserFromDetailedDebts(debts, memberIds);
+
+  for (const userId of memberIds) {
+    const debtNetPaise = debtByUser.get(userId) || 0;
+    const balanceNetPaise = balanceByUser.get(userId) || 0;
+    if (debtNetPaise !== balanceNetPaise) {
+      mismatches.push({ label, userId, debtNetPaise, balanceNetPaise });
+    }
+  }
+}
+
 describe('Randomized Financial Property Invariant Tests (100 Simulations)', () => {
   it('should maintain zero-sum balance and allocation invariants across 100 randomized groups', () => {
     const SPLIT_TYPES = ['equal', 'exact', 'percentage', 'shares', 'adjustment'];
@@ -219,5 +285,110 @@ describe('Randomized Financial Property Invariant Tests (100 Simulations)', () =
         );
       }
     }
+  });
+
+  it('matches detailed debt net to balance net for 6000 seeded multi-payer expenses', () => {
+    const seed = 0xF4A2026;
+    console.log(`F4 random seed: ${seed} (0x${seed.toString(16)})`);
+    const random = createSeededRandom(seed);
+    const members = Array.from({ length: 8 }, (_, index) => ({
+      id: index + 1,
+      name: `F4_Member_${index + 1}`,
+    }));
+    const memberIds = members.map((member) => member.id);
+    const splitTypes = ['equal', 'exact', 'percentage', 'shares', 'adjustment', 'itemized'];
+    const splitTypesSeen = new Set();
+    const expenses = [];
+
+    // A paid 1 paisa, B paid 99, and all three users share the 100-paise expense.
+    expenses.push({
+      id: 0,
+      total_amount_paise: 100,
+      is_voided: false,
+      payers: [
+        { user_id: 1, amount_paise: 1 },
+        { user_id: 2, amount_paise: 99 },
+      ],
+      participants: calculateSplit('equal', 100, [1, 2, 3]).map((participant) => ({
+        user_id: participant.userId,
+        share_amount_paise: participant.sharePaise,
+      })),
+    });
+
+    for (let expenseIndex = 1; expenseIndex <= 6000; expenseIndex++) {
+      const totalPaise = seededInt(random, 100, 100000);
+      const participantCount = seededInt(random, 2, memberIds.length);
+      const participantIds = shuffled(memberIds, random).slice(0, participantCount);
+      const payerCount = seededInt(random, 2, Math.min(4, memberIds.length));
+      const payerIds = shuffled(memberIds, random).slice(0, payerCount);
+      const payerAmounts = positivePartition(totalPaise, payerCount, random);
+      const payers = payerIds.map((userId, index) => ({
+        user_id: userId,
+        amount_paise: payerAmounts[index],
+      }));
+      const splitType = splitTypes[seededInt(random, 0, splitTypes.length - 1)];
+      splitTypesSeen.add(splitType);
+
+      let splitData;
+      if (splitType === 'equal') {
+        splitData = participantIds;
+      } else if (splitType === 'exact') {
+        splitData = positivePartition(totalPaise, participantCount, random).map((amountPaise, index) => ({
+          userId: participantIds[index],
+          amountPaise,
+        }));
+      } else if (splitType === 'percentage') {
+        splitData = positivePartition(100, participantCount, random).map((percentage, index) => ({
+          userId: participantIds[index],
+          percentage,
+        }));
+      } else if (splitType === 'shares') {
+        splitData = participantIds.map((userId) => ({ userId, shares: seededInt(random, 1, 10) }));
+      } else if (splitType === 'adjustment') {
+        const adjustment = seededInt(random, 0, 5);
+        splitData = participantIds.map((userId, index) => ({
+          userId,
+          adjustmentPaise: index === 0 ? adjustment : index === 1 ? -adjustment : 0,
+        }));
+      } else {
+        const itemCount = seededInt(random, 1, 5);
+        const itemAmounts = positivePartition(totalPaise, itemCount, random);
+        splitData = {
+          items: itemAmounts.map((amountPaise, index) => ({
+            name: `F4 item ${index + 1}`,
+            amountPaise,
+            assignedUserIds: [participantIds[seededInt(random, 0, participantIds.length - 1)]],
+          })),
+          sharedTaxPaise: 0,
+        };
+      }
+
+      const participants = calculateSplit(splitType, totalPaise, splitData, participantIds);
+      expenses.push({
+        id: expenseIndex,
+        total_amount_paise: totalPaise,
+        is_voided: random() < 0.1,
+        payers,
+        participants: participants.map((participant) => ({
+          user_id: participant.userId,
+          share_amount_paise: participant.sharePaise,
+        })),
+      });
+    }
+
+    assert.deepStrictEqual([...splitTypesSeen].sort(), [...splitTypes].sort());
+    assert.strictEqual(expenses.length, 6001);
+
+    const mismatches = [];
+    for (const expense of expenses) {
+      assertDebtNetMatchesBalances([expense], members, `expense ${expense.id}`, mismatches);
+    }
+    assertDebtNetMatchesBalances(expenses, members, 'all expenses combined', mismatches);
+
+    assert.deepStrictEqual(
+      mismatches.slice(0, 10),
+      [],
+      `${mismatches.length} debts-vs-balances mismatches with seed ${seed}; first mismatches: ${JSON.stringify(mismatches.slice(0, 10))}`
+    );
   });
 });

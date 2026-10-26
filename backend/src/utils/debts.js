@@ -36,48 +36,55 @@ function calculateDetailedDebts(expenses = [], settlements = [], userMap = {}) {
 
   // 1. Process Expenses
   for (const exp of (expenses || [])) {
+    if (exp.is_voided) continue;
+
     const total = Number(exp.total_amount_paise);
     if (!total || total <= 0) continue;
 
     const payers = [...(exp.payers || [])].sort((a, b) => Number(a.user_id) - Number(b.user_id));
-    const participants = exp.participants || [];
+    const remainingShares = (exp.participants || [])
+      .map((part) => ({
+        participantId: Number(part.user_id),
+        remainingPaise: Number(part.share_amount_paise),
+      }))
+      .filter((part) => part.remainingPaise > 0);
 
-    for (const part of participants) {
-      const participantId = Number(part.user_id);
-      const sharePaise = Number(part.share_amount_paise);
-      if (sharePaise <= 0) continue;
+    // Source of truth: allocate each payer's amount once against the remaining participant shares.
+    // This preserves exact payer and participant totals, so pairwise debts net to /balances.
+    for (const payer of payers) {
+      const payerId = Number(payer.user_id);
+      const payerAmount = Number(payer.amount_paise);
+      const availablePaise = remainingShares.reduce((sum, part) => sum + part.remainingPaise, 0);
+      if (!Number.isSafeInteger(payerAmount) || payerAmount <= 0 || payerAmount > availablePaise) continue;
 
-      // Distribute participant's share across payers proportionally
-      let allocated = 0;
-      const payerAllocations = payers.map((payer) => {
-        const payerId = Number(payer.user_id);
-        const payerAmount = Number(payer.amount_paise);
-        const raw = (sharePaise * payerAmount) / total;
-        const base = Math.floor(raw);
+      const denominator = BigInt(availablePaise);
+      const allocations = remainingShares.map((part) => {
+        const numerator = BigInt(part.remainingPaise) * BigInt(payerAmount);
+        const base = Number(numerator / denominator);
         return {
-          payerId,
+          ...part,
           base,
-          fraction: raw - base,
+          remainder: numerator % denominator,
         };
       });
+      const baseSum = allocations.reduce((sum, part) => sum + part.base, 0);
+      const extraPaise = payerAmount - baseSum;
 
-      const baseSum = payerAllocations.reduce((sum, p) => sum + p.base, 0);
-      const remainder = sharePaise - baseSum;
-
-      // Deterministic remainder distribution: sort by fraction desc, then payerId asc
-      const sortedPayers = [...payerAllocations].sort((a, b) => {
-        if (Math.abs(b.fraction - a.fraction) > 0.000001) {
-          return b.fraction - a.fraction;
-        }
-        return a.payerId - b.payerId;
+      // Largest exact remainders receive leftover paise; user ID breaks ties deterministically.
+      const remainderOrder = [...allocations].sort((a, b) => {
+        if (a.remainder === b.remainder) return a.participantId - b.participantId;
+        return a.remainder > b.remainder ? -1 : 1;
       });
+      const bonusParticipants = new Set(
+        remainderOrder.slice(0, extraPaise).map((part) => part.participantId)
+      );
 
-      const bonusPayers = new Set(sortedPayers.slice(0, remainder).map((p) => p.payerId));
-
-      for (const p of payerAllocations) {
-        const finalPayerShare = p.base + (bonusPayers.has(p.payerId) ? 1 : 0);
-        if (participantId !== p.payerId && finalPayerShare > 0) {
-          addDebt(participantId, p.payerId, finalPayerShare);
+      for (const allocation of allocations) {
+        const amountPaise = allocation.base + (bonusParticipants.has(allocation.participantId) ? 1 : 0);
+        const remainingShare = remainingShares.find((part) => part.participantId === allocation.participantId);
+        remainingShare.remainingPaise -= amountPaise;
+        if (allocation.participantId !== payerId && amountPaise > 0) {
+          addDebt(allocation.participantId, payerId, amountPaise);
         }
       }
     }
