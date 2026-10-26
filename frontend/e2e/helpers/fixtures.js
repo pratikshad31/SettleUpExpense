@@ -7,7 +7,7 @@ const backendRequire = createRequire(new URL('../../../backend/package.json', im
 const jwt = backendRequire('jsonwebtoken');
 
 export const test = base.extend({
-  api: [async ({}, use) => {
+  api: [async (_deps, use) => {
     const api = await createApiContext();
     await use(api);
     await api.dispose();
