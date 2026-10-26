@@ -14,18 +14,29 @@ router.use(authenticate);
 router.get('/search', async (req, res, next) => {
   try {
     const { q } = req.query;
-    if (!q || q.trim().length < 2) {
+    if (typeof q !== 'string' || q.trim().length < 2) {
       return res.json({ users: [] });
     }
 
     const term = `%${q.trim().toLowerCase()}%`;
     const result = await query(
-      `SELECT id, name, email, upi_id 
-       FROM users 
-       WHERE LOWER(email) LIKE $1 OR LOWER(name) LIKE $1
-       ORDER BY name ASC 
+      `SELECT u.id, u.name
+       FROM users u
+       WHERE u.id <> $2
+         AND (LOWER(u.email) LIKE $1 OR LOWER(u.name) LIKE $1)
+         AND EXISTS (
+           SELECT 1
+           FROM group_members caller_members
+           JOIN group_members target_members
+             ON target_members.group_id = caller_members.group_id
+           WHERE caller_members.user_id = $2
+             AND caller_members.status = 'active'
+             AND target_members.user_id = u.id
+             AND target_members.status = 'active'
+         )
+       ORDER BY u.name ASC
        LIMIT 10`,
-      [term]
+      [term, req.user.id]
     );
 
     res.json({ users: result.rows });

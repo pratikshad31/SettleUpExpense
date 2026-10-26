@@ -242,6 +242,7 @@ describe('Settlement Controller (src/controllers/settlementController.js)', () =
   describe('getUpiDetails', () => {
     it('should generate valid UPI deep link and details for recipient with UPI ID', async () => {
       const req = {
+        user: payerUser,
         query: { toUserId: recipientUser.id, amountINR: '150.50', note: 'Dinner split' },
       };
       const res = createMockRes();
@@ -254,6 +255,7 @@ describe('Settlement Controller (src/controllers/settlementController.js)', () =
 
     it('should reject when recipient has no UPI ID registered', async () => {
       const req = {
+        user: payerUser,
         query: { toUserId: thirdUser.id, amountINR: '100' },
       };
       const res = createMockRes();

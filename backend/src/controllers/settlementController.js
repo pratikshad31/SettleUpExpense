@@ -427,6 +427,22 @@ async function getUpiDetails(req, res, next) {
       return res.status(400).json({ error: 'Valid toUserId is required' });
     }
 
+    const sharedGroupRes = await query(
+      `SELECT 1
+       FROM group_members caller_members
+       JOIN group_members target_members
+         ON target_members.group_id = caller_members.group_id
+       WHERE caller_members.user_id = $1
+         AND caller_members.status = 'active'
+         AND target_members.user_id = $2
+         AND target_members.status = 'active'
+       LIMIT 1`,
+      [req.user.id, uid]
+    );
+    if (sharedGroupRes.rowCount === 0) {
+      return res.status(403).json({ error: 'You must share an active group with this user to view UPI details.' });
+    }
+
     const userRes = await query('SELECT id, name, upi_id FROM users WHERE id = $1', [uid]);
     if (userRes.rowCount === 0) {
       return res.status(404).json({ error: 'Recipient user not found' });
