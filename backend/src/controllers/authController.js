@@ -6,8 +6,8 @@ const jwt = require('jsonwebtoken');
 const { query } = require('../db');
 const { isValidUpiId } = require('../utils/upi');
 const { validatePassword } = require('../utils/password');
+const { JWT_SECRET } = require('../config');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'settleup_super_secret_jwt_key_2026_dev_india';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 /**

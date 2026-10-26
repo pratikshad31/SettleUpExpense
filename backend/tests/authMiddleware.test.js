@@ -11,7 +11,7 @@ describe('Auth Middleware (src/middleware/auth.js)', () => {
   let validToken;
   let nonExistentUserToken;
   let testUserId;
-  const secret = process.env.JWT_SECRET || 'settleup_super_secret_jwt_key_2026_dev_india';
+  const secret = process.env.JWT_SECRET;
 
   before(async () => {
     // Insert a test user

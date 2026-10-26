@@ -3,6 +3,7 @@
 
 const jwt = require('jsonwebtoken');
 const { query } = require('../db');
+const { JWT_SECRET } = require('../config');
 
 async function authenticate(req, res, next) {
   try {
@@ -12,11 +13,9 @@ async function authenticate(req, res, next) {
     }
 
     const token = authHeader.split(' ')[1];
-    const secret = process.env.JWT_SECRET || 'settleup_super_secret_jwt_key_2026_dev_india';
-
     let decoded;
     try {
-      decoded = jwt.verify(token, secret);
+      decoded = jwt.verify(token, JWT_SECRET);
       if (!decoded || !decoded.userId) {
         return res.status(401).json({ error: 'Invalid token payload.' });
       }
