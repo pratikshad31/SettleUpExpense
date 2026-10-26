@@ -4,7 +4,7 @@ import { registerUser, seedExpense } from './helpers/api.js';
 import { balanceSnapshot } from './helpers/fixtures.js';
 
 test.describe('authentication through the browser', () => {
-  test('registers a valid user, logs out, and rejects a duplicate email with a clear message', async ({ page, api }) => {
+  test('registers a valid user, logs out, and rejects a duplicate email with a clear message', async ({ page}) => {
     const email = `ui-signup-${randomUUID()}@example.test`;
     await page.goto('/signup');
     await page.locator('#name').fill('Browser Signup User');
