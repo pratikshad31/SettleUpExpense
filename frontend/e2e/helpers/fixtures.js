@@ -1,7 +1,9 @@
+/* eslint-disable react-hooks/rules-of-hooks, no-empty-pattern */
 import { test as base, expect } from '@playwright/test';
 import { createApiContext, registerUser, createGroup, addMember } from './api.js';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
+import process from 'node:process';
 
 const backendRequire = createRequire(new URL('../../../backend/package.json', import.meta.url));
 const jwt = backendRequire('jsonwebtoken');
