@@ -1,14 +1,30 @@
 # SettleUpExpenses — Full-Stack Shared Expense Management & Settlement Optimizer
 
-[![Tests](https://img.shields.io/badge/Tests-152%20Passed-10b981.svg)]()
-[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%20(Direct%20pg)-336791.svg)]()
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-000000.svg)](https://settle-up-expense.vercel.app/)
+[![Tests](https://img.shields.io/badge/Backend%20Tests-187%20Passing-10b981.svg)]()
+[![E2E](https://img.shields.io/badge/E2E-Playwright-45ba4b.svg)]()
+[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%20(Neon)-336791.svg)]()
 [![Node.js](https://img.shields.io/badge/Backend-Node.js%20%2B%20Express%205-68a063.svg)]()
 [![React](https://img.shields.io/badge/Frontend-React%2019%20%2B%20Vite%208-61dafb.svg)]()
 [![UPI](https://img.shields.io/badge/Payments-NPCI%20UPI%20Links%20%26%20QR-4f46e5.svg)]()
 
-**SettleUpExpenses** is a full-stack shared-expense management and debt-settlement platform engineered for flatmates, friends, college groups, and travel groups in India.
+**SettleUpExpenses** is a full-stack shared-expense management and debt-settlement platform built for flatmates, friends, college groups, and travel groups in India.
 
-The application computes and displays exactly **who owes whom**, maintains a mathematically verified **zero-sum net balance invariant** over **integer-paise** money, produces an **optimized settlement plan** with a deterministic **Greedy Min-Cash-Flow** algorithm bounded to at most $N - 1$ payments, and enforces a **role-gated settlement approval workflow** (`PENDING → MARKED_PAID → CONFIRMED / REJECTED`) with native **Indian UPI** deep links and QR codes.
+It computes exactly **who owes whom**, maintains a **zero-sum net balance invariant** over **integer-paise** money, produces an **optimized settlement plan** with a deterministic **Greedy Min-Cash-Flow** algorithm (at most N − 1 payments), and enforces a **role-gated settlement approval workflow** (`pending → marked_paid → confirmed / rejected`) with native **Indian UPI** deep links and QR codes.
+
+## 🌐 Live Deployment
+
+| Tier | Platform | URL / Notes |
+|---|---|---|
+| **Frontend** | [Vercel](https://settleupexpense.onrender.com) | **https://settle-up-expense.vercel.app/** |
+| **Backend API** | [Render](https://render.com) (Web Service) | `https://YOUR-RENDER-SERVICE.onrender.com` |
+| **Database** | [Neon](https://neon.tech) (serverless PostgreSQL) | Connected via `DB_*` environment variables, SSL enabled in production |
+
+> **Free-tier note:** the live demo runs on free/trial plans. The Render service may go to sleep when idle, so the **first request after inactivity can take several seconds** while it wakes up. Neon's free compute can also suspend when idle and resume on the next query.
+
+```
+Browser ──► Vercel (React SPA) ──HTTPS──► Render (Express API) ──SSL──► Neon (PostgreSQL)
+```
 
 ---
 
@@ -16,59 +32,63 @@ The application computes and displays exactly **who owes whom**, maintains a mat
 
 ### 1. Financial Precision — Integer Paise Everywhere
 - All monetary values are calculated and stored as **integer paise** (₹1 = 100 paise) in PostgreSQL `BIGINT` columns — no floats ever touch the ledger.
-- Input parsing rejects amounts with more than 2 decimal places; the server **recomputes every split itself** and verifies `Σ participant shares == expense total` before inserting — client-supplied totals are never trusted.
-- **Zero-sum invariant**: $\sum \text{Net Balance} \equiv 0$ is computed on every balance read, returned as `netSumPaise`, and surfaced in the UI (*"Sum of group balances = ₹0.00 (Zero-Sum Invariant Verified)"*).
+- Input parsing rejects amounts with more than 2 decimal places and out-of-range paise values; the server **recomputes every split itself** and verifies `Σ participant shares == expense total` before inserting — client-supplied totals are never trusted.
+- **Zero-sum invariant**: `Σ net balance ≡ 0` is computed on every balance read, returned as `netSumPaise`, and surfaced in the UI. The optimizer **throws** (rather than warns) if the invariant is ever violated.
 
 ### 2. Six Split Engines with Deterministic Remainder Distribution
-1. **Equal** — floor division; the leftover paises go one-by-one to the first participants sorted by user ID ascending.
+1. **Equal** — floor division; leftover paise go one-by-one to the first participants sorted by user ID ascending.
 2. **Exact Amounts** — explicit per-member paise allocations, rejected unless they sum exactly to the total.
-3. **Percentage** — percentages must total 100% (±0.01% tolerance); floor the base and award leftover paises by largest fractional remainder (ties → lowest user ID).
+3. **Percentage** — percentages must total 100% (±0.01% tolerance); floor the base and award leftover paise by largest fractional remainder (ties → lowest user ID).
 4. **Shares / Weights** — proportional weighted shares (e.g. 3 shares vs 2 shares), same largest-remainder distribution.
 5. **Adjustment** — equal base split plus signed per-member paise adjustments, with negative-final-share protection.
 6. **Itemized** — line items assigned to specific members (split equally within an item), with shared tax/fees/delivery distributed proportionally to each member's item subtotal.
 
-> **Note on UI coverage:** the expense form currently exposes **Equal, Exact, Percentage, and Itemized** split buttons. **Shares** and **Adjustment** are fully implemented in the API, schema (`split_type` CHECK), split engine, and seed data (the seeded Goa villa expense uses `shares` and the seafood dinner uses `adjustment`).
+> **Note on UI coverage:** the expense form currently exposes **Equal, Exact, Percentage, and Itemized**. **Shares** and **Adjustment** are fully implemented in the API, schema (`split_type` CHECK), split engine, and seed data, but do not have buttons in the UI yet.
 
 ### 3. Multiple Payers & Subset Participants
 - Expenses can be funded by **one or several payers** with independent contribution amounts — the UI has a *Single Payer / Multiple Payers* toggle with live "matched total" feedback; contributions must equal the expense total exactly.
-- **Payers need not be participants**, and any valid subset of active group members can participate in an expense (the server rejects non-members as participants).
+- **Payers need not be participants**, and any valid subset of active group members can participate (the server rejects non-members).
 
 ### 4. Who-Owes-Whom & Settlement Optimization (Dual Views)
-- **Detailed Person-to-Person Debts** (`GET /api/groups/:id/debts`): deterministic proportional payer attribution (each payer funded `P_k / Total` of every participant's share), confirmed-settlement offset with direction reversal on overpayment, then bilateral netting so at most one direction survives per pair.
-- **Optimized Settlement Plan** (`GET /api/groups/:id/balances`): deterministic Greedy Min-Cash-Flow — creditors sorted descending, debtors sorted descending (userId tie-break), repeatedly paying `min(|debt|, credit)` between the largest debtor and largest creditor. This collapses dense circular debts into **at most $N - 1$ payments** in $O(N \log N)$, and each suggestion ships with a ready-to-use UPI URI.
+- **Detailed Person-to-Person Debts** (`GET /api/groups/:id/debts`): deterministic proportional payer attribution, confirmed-settlement offset with direction reversal on overpayment, then bilateral netting so at most one direction survives per pair.
+- **Optimized Settlement Plan** (`GET /api/groups/:id/balances`): Greedy Min-Cash-Flow — repeatedly pays `min(|debt|, credit)` between the largest debtor and largest creditor, collapsing circular debts into **at most N − 1 payments** in O(N log N). Each suggestion ships with a ready-to-use UPI URI.
+- The detailed-debt net and the balance net are cross-checked by a seeded randomized test (6,000 multi-payer expenses).
 
 ### 5. Role-Enforced Settlement State Machine
-The `settlements` table enforces four statuses via a `CHECK` constraint: `pending`, `marked_paid`, `confirmed`, `rejected`.
+Statuses (enforced by a DB `CHECK` constraint): `pending`, `marked_paid`, `confirmed`, `rejected`.
 
-- **Payer (debtor) only — "Record Payment"**: a settlement can only be created for your own debt (`from_user` must equal the requester, otherwise **403**), and it is **always stored as `pending`**.
-- **Payer only — "Mark Paid"**: moves `pending → marked_paid` with a UPI reference/UTR; the payer can never confirm or reject their own payment (explicit **403**).
-- **Receiver (creditor) only — "Confirm" / "Reject"**: only `to_user` may transition to `confirmed` or `rejected`; everyone else (including admins and third parties) sees **no action buttons at all**.
-- **Strict balance-timing invariant**:
-  - `pending` and `marked_paid` payments **do not** alter any balance.
-  - `rejected` settlements **do not** alter any balance and cancel the request.
-  - **Only `confirmed` settlements move money** — confirmation instantly recomputes net balances, the optimized plan, and the detailed debt graph.
-- **Full audit trail**: every transition is written to `settlement_status_history` (previous → new status, actor, timestamp) plus the group `activity_logs`.
-- **Concurrency safety**: all transitions run in a transaction behind `SELECT ... FOR UPDATE` row locks, so racing confirmations cannot double-apply.
-- **Idempotency**: settlement routes accept `Idempotency-Key` headers; replays are served from a 24-hour response cache (`idempotency_records`) instead of re-executing.
+- **Payer (debtor) only — "Record Payment"**: `from_user` must equal the requester (otherwise **403**); always stored as `pending`.
+- **Settlement amount is capped at the actual net debt** between the two parties (pending settlements are subtracted from the available debt; opposite-direction debts are netted first). One paisa above the debt is rejected, and concurrent creates are serialized so their combined amount cannot exceed it.
+- **Payer only — "Mark Paid"**: `pending → marked_paid` with a UPI reference/UTR; the payer can never confirm or reject their own payment.
+- **Receiver (creditor) only — "Confirm" / "Reject"**: only `to_user` may move a settlement to `confirmed` or `rejected`; admins and third parties see no action buttons.
+- **Strict balance-timing invariant**: `pending`, `marked_paid`, and `rejected` never change balances. **Only `confirmed` settlements move money.**
+- **Full audit trail**: every transition is written to `settlement_status_history` plus the group `activity_logs`.
+- **Concurrency safety**: transitions run in a transaction behind `SELECT … FOR UPDATE` row locks.
+- **Idempotency**: `Idempotency-Key` is supported on expense creation and all settlement mutation routes. Keys are **scoped per user + route** and bound to a request hash — replaying the same key with a different body returns **422**, concurrent duplicates create exactly one record, and a 5xx releases the reservation so a corrected retry can run. Responses are cached for 24 hours in `idempotency_records`.
 
 ### 6. Indian UPI Deep Links & QR Code Generator
-- The backend validates VPAs against the standard `user@bankhandle` format and generates NPCI-compliant deep links: `upi://pay?pa=...&pn=...&am=...&cu=INR&tn=...`.
+- The backend validates VPAs (`user@bankhandle`) and generates NPCI-compliant deep links: `upi://pay?pa=...&pn=...&am=...&cu=INR&tn=...`.
 - Served through `GET /api/settlements/upi-details` (with a payer-safety disclaimer) and auto-attached to every optimized suggestion and recorded settlement.
-- In-app **"Pay with UPI"** modal renders a scannable **QRCodeSVG** (via `qrcode.react`, 220 px, error-correction level M) for GPay / PhonePe / Paytm / BHIM, with a copyable VPA and an *"Open in UPI App"* button.
-- Disclaimer shown to users: launching a UPI app or scanning the QR is **not** proof of payment — the recipient must verify and confirm inside SettleUp before balances update.
+- In-app **"Pay with UPI"** modal renders a scannable QR (`qrcode.react`, 220 px, error-correction level M) for GPay / PhonePe / Paytm / BHIM, with a copyable VPA and an *Open in UPI App* button.
+- Launching a UPI app or scanning the QR is **not** proof of payment — the recipient must confirm inside SettleUp before balances update.
+- UPI lookups are privacy-gated: you can only look up or search users who share an active group with you.
 
 ### 7. Governance, Audit Trails & Integrity
 - **Group roles**: `owner` / `admin` / `member`. Adding members by email and changing roles require admin/owner privileges; every member can add expenses and settle their own debts.
-- **Restricted Group Exit**: members cannot leave while their net balance is non-zero (whether they owe or are owed), with a specific error message showing the amount.
-- **Owner continuity**: if the owner leaves after settling up, the next remaining active member is automatically promoted to owner; membership is set to `inactive` so financial history is preserved.
-- **Soft-Voiding**: expenses are never deleted — voiding sets `is_voided = true` (creator, or any admin/owner) and balances immediately recompute without them.
-- **Expense Versioning**: every edit snapshots the previous state into `expense_versions` together with an edit reason (the UI requires one) and surfaces the revision history in the expense details modal.
-- **Activity Logs**: chronological per-group history of expense, settlement, membership, and group events (paginated, max 100 per page).
-- **Invite Codes**: groups are protected by an auto-generated 8-character invite code (join by code, add by email, user search).
+- **Restricted Group Exit**: members cannot leave while their net balance is non-zero, **or** while they are a payer/receiver on a `pending` or `marked_paid` settlement. Leaving is serialized against settlement creation and rolls back fully if any step fails.
+- **Owner continuity**: if the owner leaves, the earliest-joined remaining active member is promoted; membership is set to `inactive` so financial history is preserved.
+- **Soft-Voiding**: expenses are never deleted — voiding sets `is_voided = true` and balances recompute immediately.
+- **Expense Versioning + Optimistic Locking**: every edit snapshots the previous state into `expense_versions` with a required edit reason. Edits must include the current `version`; stale or simultaneous edits get **409 Conflict**.
+- **Activity Logs**: chronological per-group history (paginated, max 100 per page).
+- **Invite Codes**: groups have an auto-generated 8-character invite code (join by code, add by email, user search).
 
 ### 8. Account Security
-- Strong password policy enforced server-side **and** mirrored live in the signup UI: minimum 8 characters, upper + lower case, a digit, a special character, and a blocklist of 22 common weak passwords — plus a real-time Weak/Medium/Strong meter.
-- JWT bearer authentication (default expiry `7d`), bcrypt password hashing (cost 10), profile update and password-change endpoints.
+- Server-side password policy mirrored live in the signup UI: min 8 chars, upper + lower case, digit, special character, blocklist of 22 common weak passwords, and a Weak/Medium/Strong meter.
+- JWT bearer authentication (default expiry `7d`), bcrypt hashing (cost 10), profile update and password-change endpoints.
+- **Login timing protection**: unknown emails still run one bcrypt comparison against a dummy hash and return the same 401 as a wrong password, so accounts can't be enumerated by response or timing.
+- Tokens with `alg: none` or a tampered signature are rejected (covered by tests).
+
+> **Known limitation:** the "Forgot Password?" dialog on the login page is a UI placeholder only — there is no backend reset flow or email delivery yet. Logged-in users can change their password from **Profile Settings**.
 
 ---
 
@@ -76,42 +96,36 @@ The `settlements` table enforces four statuses via a `CHECK` constraint: `pendin
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | React 19.3, Vite 8.3, React Router 7, lucide-react icons, qrcode.react, plain `fetch` API client (no axios), hand-rolled CSS design system (custom properties, cards/modals/tabs/badges/toasts, responsive at 768px), ESLint 10 flat config |
-| **Backend** | Node.js 22, Express 5.2, direct `pg` 8.23 driver (parameterized SQL, no ORM), bcryptjs, jsonwebtoken, express-rate-limit, cors, dotenv |
-| **Database** | PostgreSQL — 12 tables, `BIGINT` paise columns, foreign keys, `CHECK` constraints, indexes, ACID transactions (`BEGIN … COMMIT / ROLLBACK`) |
-| **Testing** | Node.js built-in test runner (`node --test`), Supertest for REST integration, Monte Carlo randomized invariant testing |
+| **Frontend** | React 19, Vite 8, React Router 7, lucide-react, qrcode.react, plain `fetch` API client (no axios), hand-written CSS design system, ESLint 10 flat config |
+| **Backend** | Node.js 22, Express 5, direct `pg` driver (parameterized SQL, no ORM), bcryptjs, jsonwebtoken, **helmet**, cors, express-rate-limit, dotenv |
+| **Database** | PostgreSQL — 12 tables, `BIGINT` paise columns, foreign keys, `CHECK` constraints, indexes, ACID transactions |
+| **Testing** | Node built-in test runner (`node --test`), Supertest (REST integration), randomized/Monte Carlo invariant tests, **Playwright** (browser E2E) |
+| **Hosting** | Vercel (frontend) · Render (API) · Neon (PostgreSQL) |
 
 ---
 
-## 🚀 Quick Start Guide
+## 🚀 Quick Start (Local Development)
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) **v22 LTS** (developed and tested on v22.17)
+- [Node.js](https://nodejs.org/) **v22 LTS**
 - [PostgreSQL](https://www.postgresql.org/) v14+ running locally or remotely
 
 ### 1. Install Dependencies
-
 ```bash
 npm --prefix backend install
 npm --prefix frontend install
 ```
-
 > The root `package.json` only wires convenience scripts — no root install is required.
 
 ### 2. Create the Database
-
 ```sql
 CREATE DATABASE settleup_expenses;
 ```
 
 ### 3. Configure the Backend
-
-Copy the template and edit `backend/.env`:
-
 ```bash
 cp backend/.env.example backend/.env
 ```
-
 ```env
 DB_USER=postgres
 DB_PASSWORD=your_postgres_password
@@ -119,115 +133,151 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=settleup_expenses
 PORT=5000
-JWT_SECRET=change_this_to_a_long_random_string
+JWT_SECRET=your_super_secret_jwt_key_at_least_32_chars
 JWT_EXPIRES_IN=7d
 NODE_ENV=development
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
 
-> Set all database variables in the environment. `DB_NAME` must match the database you created in step 2. `CORS_ORIGINS` is a comma-separated list of frontend origins allowed to call the API.
+Important behaviour (the server **refuses to start** otherwise):
+- `JWT_SECRET` is required and must be **at least 32 characters**.
+- All five `DB_*` variables are required (there is **no** `DATABASE_URL` support and no fallback database name).
+- `CORS_ORIGINS` must list explicit origins, comma-separated. A wildcard `*` is rejected.
+- With `NODE_ENV=production`, the database connection uses SSL with certificate verification.
 
 ### 4. Configure the Frontend
-
 ```bash
 cp frontend/.env.example frontend/.env
 ```
-
 ```env
 VITE_API_URL=http://localhost:5000/api
 ```
-
-> The Vite dev server also proxies `/api` → `http://localhost:5000`, so `VITE_API_URL=/api` works as well.
+> The Vite dev server also proxies `/api` → `http://localhost:5000`, so `VITE_API_URL=/api` works locally too.
 
 ### 5. Migrate & Seed
-
-From the project root:
-
 ```bash
-# Create/update the schema (schema.sql, idempotent DDL)
-npm run migrate
-
-# Seed demo users, 2 groups, 7 expenses covering all 6 split methods,
-# and settlements in every status (pending / marked_paid / confirmed / rejected)
-npm run seed
+npm run migrate   # schema.sql + migrations/001_idempotency_scope.sql (idempotent)
+npm run seed      # demo users, 2 groups, 7 expenses, settlements in every status
 ```
+
+> ⚠️ **`npm run seed` begins with `TRUNCATE … RESTART IDENTITY CASCADE`** — it wipes every table. Never run it against a database holding data you want to keep (including your Neon database).
 
 ### 6. Start the Servers
-
-**Terminal 1 — Backend API** (http://localhost:5000):
-
 ```bash
-npm run dev:backend     # nodemon; use `npm start` for plain node
+npm run dev:backend     # http://localhost:5000  (nodemon; `npm start` for plain node)
+npm run dev:frontend    # http://localhost:5173
 ```
-
-**Terminal 2 — Frontend** (http://localhost:5173):
-
-```bash
-npm run dev:frontend
-```
-
-Verify the stack:
-
-- `GET http://localhost:5000/api/health` → `{ status: "healthy" }`
-- `GET http://localhost:5000/api/db-test` → confirms the PostgreSQL connection
+Verify: `GET /api/health` → `{ "status": "healthy" }` and `GET /api/db-test` → confirms the PostgreSQL connection.
 
 ### Root Scripts
 
 | Command | Action |
 |---|---|
-| `npm start` | Start backend (production-style, `node server.js`) |
+| `npm start` | Start backend (`node server.js`) |
 | `npm run dev:backend` / `npm run dev:frontend` | Dev servers with hot reload |
 | `npm run migrate` / `npm run seed` | Database migration / demo data seeding |
-| `npm test` | Backend **and** frontend test suites |
+| `npm test` | Backend **and** frontend unit test suites |
 | `npm run test:unit` / `test:random` / `test:api` | Backend sub-suites |
+| `npm run test:frontend` | Frontend unit tests |
 | `npm run build:frontend` | Production frontend build |
 
----
-
-## 🧪 Automated Test Suite — 152 Tests Passing
-
-```bash
-npm test        # root: runs backend (144) + frontend (8)
-```
-
-### Backend — 144 tests across 18 files
-
-```bash
-npm --prefix backend test
-```
-
-| Sub-suite | Command | Tests | Coverage |
-|---|---|---|---|
-| Unit | `npm --prefix backend run test:unit` | 48 | Money math, all 6 split engines, UPI URI generation, pairwise debts, min-cash-flow optimizer — **runs without a database** |
-| Randomized | `npm --prefix backend run test:random` | 1 case → **100 Monte Carlo simulations** | Zero-sum and allocation invariants across 100 randomized multi-user groups — **runs without a database** |
-| REST API | `npm --prefix backend run test:api` | 14 | End-to-end Supertest coverage of the live Express routes (requires PostgreSQL) |
-
-**Database split:** 62 of the 144 tests are pure unit tests (8 files — money, splits, upi, debts, optimizer, password rules, error handler, randomized); the remaining **82 tests (10 files) require a reachable PostgreSQL** instance configured in `backend/.env`, because there is no mock layer — controllers are exercised against the real pool.
-
-> ⚠️ **`npm test` re-seeds the database.** `api.test.js` and `balanceUpdateTiming.test.js` call the seeder, which starts with `TRUNCATE … RESTART IDENTITY CASCADE` and reloads the demo dataset. Point `DB_NAME` at a dedicated test database, or run `npm run seed` afterwards to restore demo data.
-
-What the suite verifies:
-
-- All **6 split engines** and their deterministic 1-paisa remainder distributions (including rejection of invalid allocations) — `splits.test.js` (22 cases).
-- **Multi-payer** contributions, **subset participant** allocations, expense creation/edit/void versioning.
-- **Zero-sum invariants** across 100 randomized simulations.
-- The **settlement state machine**: payer-only creation/mark-paid, receiver-only confirmation/rejection, and rejection of self-confirmation attempts — `settlementController.test.js` (12 cases).
-- **Balance update timing**: balances unchanged for `pending` / `marked_paid` / `rejected`, updated only on `confirmed`.
-- Group authorization (`requireGroupMember` / `requireGroupAdmin` / `requireGroupOwner`), auth middleware, JWT flow, password policy, error handler, and `withTransaction` commit/rollback behavior.
-
-### Frontend — 8 tests
-
-```bash
-npm --prefix frontend test
-```
-
-Unit tests for the formatting helpers (`formatINR`, `formatDate`, `formatDateTime`, `inrToPaise`) using Node's built-in test runner.
+Playwright E2E tests run from the frontend folder: `npm --prefix frontend run test:e2e` (see [`frontend/e2e/README.md`](frontend/e2e/README.md)).
 
 ---
 
-## 🔑 Demo Accounts (Pre-Seeded)
+## ☁️ Deployment (Vercel + Render + Neon)
 
-All seeded accounts use the password **`password123`**.
+The production deployment uses three free/trial-tier services. Deploy in this order: **database → backend → frontend**, then come back and allow the frontend origin in the backend's CORS settings.
+
+### 1. Database — Neon
+1. Create a Neon project and database.
+2. From the Neon connection details, copy the **host, user, password, and database name**. The backend reads **separate variables** (`DB_HOST`, `DB_USER`, …) rather than a single connection string, so split the Neon URL into these fields. Port is `5432`.
+3. Run the migration once from your machine, with `backend/.env` temporarily pointing at Neon:
+   ```bash
+   npm run migrate
+   ```
+4. Seed demo data **only if you want demo accounts on the live site**, and only on a fresh database (`npm run seed` truncates all tables).
+
+### 2. Backend — Render (Web Service)
+| Setting | Value |
+|---|---|
+| Root directory | `backend` |
+| Build command | `npm install` |
+| Start command | `npm start` |
+| Health check path | `/api/health` |
+
+Environment variables:
+```env
+NODE_ENV=production
+DB_HOST=<neon host>
+DB_PORT=5432
+DB_USER=<neon user>
+DB_PASSWORD=<neon password>
+DB_NAME=<neon database name>
+JWT_SECRET=<random string, 32+ characters>
+JWT_EXPIRES_IN=7d
+CORS_ORIGINS=https://settle-up-expense.vercel.app
+```
+- Render supplies `PORT` automatically; the app reads it.
+- `CORS_ORIGINS` **must** contain the exact Vercel URL (no trailing slash), otherwise the browser blocks every API call. Add `http://localhost:5173` as well if you also develop against the hosted API.
+- `app.set('trust proxy', 1)` is enabled so rate limiting sees the real client IP behind Render's proxy.
+
+### 3. Frontend — Vercel
+| Setting | Value |
+|---|---|
+| Root directory | `frontend` |
+| Framework preset | Vite |
+| Build command | `npm run build` |
+| Output directory | `dist` |
+
+Environment variable:
+```env
+VITE_API_URL=https://YOUR-RENDER-SERVICE.onrender.com/api
+```
+- `VITE_API_URL` is baked in at **build time** — redeploy the frontend after changing it.
+- [`frontend/vercel.json`](frontend/vercel.json) rewrites all paths to `index.html` so client-side routes (`/dashboard`, `/groups/:id`) survive a page refresh.
+
+### Post-deploy checklist
+- [ ] `https://YOUR-RENDER-SERVICE.onrender.com/api/health` returns `{ "status": "healthy" }`
+- [ ] `https://YOUR-RENDER-SERVICE.onrender.com/api/db-test` confirms the Neon connection
+- [ ] Sign up and log in on https://settle-up-expense.vercel.app/
+- [ ] Create a group, add an expense, and run a settlement end to end
+
+---
+
+## 🧪 Automated Test Suite
+
+```bash
+npm test                              # backend (187) + frontend unit (8)
+npm --prefix backend test             # backend only
+npm --prefix frontend run test:e2e    # Playwright browser tests (37)
+```
+
+| Suite | Count | Notes |
+|---|---|---|
+| **Backend** | **187 tests across 27 files** | Run serially (`--test-concurrency=1`) with `tests/setup.js` preloaded |
+| **Frontend unit** | 8 tests | `formatINR`, `formatDate`, `formatDateTime`, `inrToPaise` |
+| **Playwright E2E** | 37 tests across 4 spec files | Auth/groups, expense flows, settlement/leave/profile, login |
+
+Backend sub-suites:
+
+| Command | What it runs |
+|---|---|
+| `npm --prefix backend run test:unit` | 6 database-free files: money, splits, validators, UPI, debts, optimizer |
+| `npm --prefix backend run test:random` | Seeded randomized financial invariants (zero-sum, detailed-debt vs. balance agreement) |
+| `npm --prefix backend run test:api` | End-to-end Supertest coverage of the Express routes (requires PostgreSQL) |
+
+Most remaining backend tests exercise real controllers against a real PostgreSQL pool (there is no mock layer), so a reachable database configured in `backend/.env` is required for `npm test`.
+
+> ⚠️ **`npm test` re-seeds and truncates the database** (`api.test.js` and `balanceUpdateTiming.test.js` call the seeder). **Never run it with `backend/.env` pointing at Neon/production.** Use a dedicated local test database.
+
+Areas covered include: all six split engines and remainder rules, multi-payer and subset-participant expenses, expense versioning and 409 conflicts, the settlement state machine and balance-update timing, settlement limits and concurrency, idempotency (concurrent keys, per-user scoping, body-mismatch 422), group leave rules, user-search privacy, JWT edge cases (`alg: none`, tampering), password policy, malformed-request handling, config/secret validation, and security headers/CORS.
+
+---
+
+## 🔑 Demo Accounts (Seeded by `npm run seed`)
+
+All seeded accounts use the password **`password123`** (accepted at login, but intentionally on the signup blocklist).
 
 | Name | Email | Role in Demo Groups | UPI ID |
 |---|---|---|---|
@@ -236,120 +286,87 @@ All seeded accounts use the password **`password123`**.
 | **Rohan Iyer** | `rohan@example.com` | Member of both groups | `rohan@paytm` |
 | **Ananya Gupta** | `ananya@example.com` | Member of both groups | `ananya@icici` |
 | **Vikram Singh** | `vikram@example.com` | Member of *Goa Trip 2026* | `vikram@upi` |
-| **Pratiksha Dogare** | `dongarepratiksha62@gmail.com` | Extra seeded account (no demo groups) | `pratiksha@upi` |
-| **Pratiksha** | `pratiksha.d@ahduni.edu.in` | Extra seeded account (no demo groups) | `pratiksha@upi` |
 
-**Demo groups & invite codes:** `Flat 402 Indiranagar` → invite code **FLAT402B**, `Goa Trip 2026` → invite code **GOA2026X**.
+**Demo groups & invite codes:** `Flat 402 Indiranagar` → **FLAT402B**, `Goa Trip 2026` → **GOA2026X**.
 
-*Tip: the Login page has one-click demo buttons for Aarav, Priya, Rohan, and Vikram.*
+The Login page has one-click demo buttons for Aarav, Priya, Rohan, and Vikram. The seed data includes 7 expenses covering **all 6 split methods** (including a multi-payer villa booking and a subset-only trip) and settlements in **all four statuses**.
 
-The seed dataset includes 7 expenses covering **all 6 split methods** (including a multi-payer villa booking and a subset-only scuba trip) and settlements in **all four statuses**, so the pending/confirm/reject workflow can be exercised immediately.
+An optional script, `backend/scripts/seed-demo.js`, rebuilds only a small **"Goa Trip"** group (users `alice@`, `bob@`, `carol@example.com`, password `Demo@12345`) without truncating other data. Run it with `node backend/scripts/seed-demo.js`.
 
 ---
 
 ## 📁 Project Directory Structure
 
 ```
-SettleUpExpenses/
-├── README.md                                   # This documentation
-├── package.json                                # Root convenience scripts (migrate/seed/test/dev)
-├── .env.example                                # Master environment template
+SettleUpExpense/
+├── README.md
+├── package.json                      # Root convenience scripts
+├── .env.example                      # Master environment template
+├── AGENTS.md                         # Project rules for AI coding agents
+├── CHANGELOG_REVIEW.md               # Code-review findings → fix → commit → test
 ├── docs/
-│   ├── API_DOCUMENTATION.md                    # REST API reference
-│   ├── DATABASE_SCHEMA.md                      # Schema, constraints, indexes & ERD
-│   └── DEPLOYMENT.md                           # Production deployment guide
+│   ├── API_DOCUMENTATION.md          # REST API reference
+│   ├── DATABASE_SCHEMA.md            # Schema, constraints, indexes & ERD
+│   └── DEPLOYMENT.md                 # Production deployment guide
 ├── backend/
-│   ├── package.json                            # API deps + test scripts
-│   ├── .env / .env.example                     # Local configuration template
-│   ├── server.js / app.js / db.js              # Thin delegates into src/
-│   ├── index.js                                # Legacy float-based prototype (unused)
+│   ├── package.json
+│   ├── .env.example
+│   ├── server.js / app.js / db.js    # Thin delegates into src/
+│   ├── scripts/
+│   │   └── seed-demo.js              # Non-destructive "Goa Trip" demo group
 │   ├── src/
-│   │   ├── server.js                           # Server bootstrap + graceful shutdown
-│   │   ├── app.js                              # Express app, middleware, route mounting
-│   │   ├── db/
-│   │   │   └── index.js                        # pg.Pool, query(), withTransaction()
+│   │   ├── server.js                 # Bootstrap + graceful shutdown
+│   │   ├── app.js                    # Express app, helmet, CORS, body guards, routes
+│   │   ├── config.js                 # JWT_SECRET validation (fails fast)
+│   │   ├── db/index.js               # pg.Pool (SSL in production), query(), withTransaction()
 │   │   ├── database/
-│   │   │   ├── schema.sql                      # Idempotent DDL (12 tables, paise BIGINT)
-│   │   │   ├── migrate.js                      # Migration runner
-│   │   │   └── seed.js                         # Indian demo data seeder
-│   │   ├── utils/
-│   │   │   ├── money.js                        # Integer paise ⇄ INR helpers
-│   │   │   ├── splits.js                       # 6 split engines + dispatcher
-│   │   │   ├── debts.js                        # Pairwise debt engine (attribution + netting)
-│   │   │   ├── optimizer.js                    # Greedy Min-Cash-Flow settlement optimizer
-│   │   │   ├── upi.js                          # VPA validation + NPCI UPI URI generator
-│   │   │   └── password.js                     # Password policy + strength scoring
-│   │   ├── middleware/
-│   │   │   ├── auth.js                         # JWT bearer verification
-│   │   │   ├── groupAuth.js                    # member / admin / owner authorizers
-│   │   │   ├── rateLimiter.js                  # auth + general rate limiters
-│   │   │   ├── idempotency.js                  # Idempotency-Key replay cache
-│   │   │   └── errorHandler.js                 # Centralized HTTP error handler
-│   │   ├── controllers/
-│   │   │   ├── authController.js               # signup / login / profile / change password
-│   │   │   ├── groupController.js              # groups, invites, members, roles, leave
-│   │   │   ├── expenseController.js            # create / read / edit / void expenses
-│   │   │   ├── settlementController.js         # settlement state machine + UPI details
-│   │   │   ├── balanceController.js            # balances, optimized plan, detailed debts
-│   │   │   └── activityController.js           # paginated activity log
-│   │   └── routes/
-│   │       ├── authRoutes.js                   # /api/auth/*
-│   │       ├── groupRoutes.js                  # /api/groups/* (group-scoped)
-│   │       ├── expenseRoutes.js                # /api/expenses/:id/*
-│   │       ├── settlementRoutes.js             # /api/settlements/*
-│   │       └── userRoutes.js                   # /api/users/search
-│   └── tests/                                  # 18 test files → 144 tests
-│       ├── money.test.js
-│       ├── splits.test.js
-│       ├── debts.test.js
-│       ├── optimizer.test.js
-│       ├── upi.test.js
-│       ├── passwordRules.test.js
-│       ├── randomizedFinancial.test.js
-│       ├── api.test.js
-│       ├── authController.test.js
-│       ├── authMiddleware.test.js
-│       ├── groupController.test.js
-│       ├── groupAuth.test.js
-│       ├── expenseController.test.js
-│       ├── settlementController.test.js
-│       ├── balanceAndActivityControllers.test.js
-│       ├── balanceUpdateTiming.test.js
-│       ├── db.test.js
-│       └── errorHandler.test.js
+│   │   │   ├── schema.sql            # Idempotent DDL (12 tables)
+│   │   │   ├── migrate.js            # Migration runner
+│   │   │   ├── migrations/
+│   │   │   │   └── 001_idempotency_scope.sql
+│   │   │   └── seed.js               # Indian demo data seeder (TRUNCATES first)
+│   │   ├── utils/                    # money, splits, debts, optimizer, groupBalances,
+│   │   │                             # upi, password, validators
+│   │   ├── middleware/               # auth, groupAuth, rateLimiter, idempotency, errorHandler
+│   │   ├── controllers/              # auth, group, expense, settlement, balance, activity
+│   │   └── routes/                   # auth, group, expense, settlement, user
+│   └── tests/                        # 27 test files → 187 tests
 └── frontend/
     ├── package.json
-    ├── .env / .env.example                     # VITE_API_URL
-    ├── index.html
-    ├── vite.config.js                          # Port 5173 + /api proxy
-    ├── eslint.config.js                        # ESLint flat config
+    ├── vercel.json                   # SPA rewrite for Vercel
+    ├── vite.config.js                # Port 5173 + /api proxy
+    ├── playwright.config.js
+    ├── eslint.config.js
+    ├── e2e/                          # Playwright specs + helpers
     └── src/
-        ├── main.jsx / App.jsx                  # Bootstrap + routes (Protected/PublicOnly)
-        ├── index.css                           # 600-line custom CSS design system
-        ├── api/client.js                       # fetch client (auth + Idempotency-Key)
-        ├── context/AuthContext.jsx             # session restore via localStorage token
-        ├── components/                         # Modal, ConfirmModal, Toast, Navbar,
-        │                                       # ExpenseModal, RecordPaymentModal,
-        │                                       # MarkPaidModal, UpiQrModal
-        ├── pages/                              # Login, Signup, Dashboard,
-        │                                       # GroupDetails (5 tabs), Profile
-        └── utils/                              # formatters (+ tests), passwordStrength
+        ├── main.jsx / App.jsx        # Bootstrap + routes (Protected / PublicOnly)
+        ├── index.css                 # Custom CSS design system
+        ├── api/client.js             # fetch client (JWT + Idempotency-Key)
+        ├── context/                  # AuthContext, authState
+        ├── components/               # Modal, ConfirmModal, Toast, Navbar, ExpenseModal,
+        │                             # RecordPaymentModal, MarkPaidModal, UpiQrModal
+        ├── pages/                    # Login, Signup, Dashboard, GroupDetails (5 tabs), Profile
+        └── utils/                    # formatters (+ tests), passwordStrength
 ```
 
 ---
 
 ## 🔒 Security & Reliability Architecture
 
-- **Direct parameterized SQL** — no ORM, no string interpolation; complete protection against SQL injection.
-- **ACID transactions** — every multi-table write (expense + payers + participants + items + version + activity log, settlement transitions, group creation) runs inside `BEGIN … COMMIT` with automatic `ROLLBACK` on failure.
-- **Row-level locking** — `SELECT … FOR UPDATE` on settlement rows makes confirmation/rejection race-proof.
-- **Idempotency guarantee** — `Idempotency-Key` headers (24 h TTL) prevent duplicate payment records and double updates on network retries.
-- **Authentication & authorization** — JWT bearer tokens, bcrypt hashing, and middleware-level membership/role checks (`requireGroupMember`, `requireGroupAdmin`) on every group-scoped route.
-- **Rate limiting** — 50 requests / 15 min on auth endpoints, 300 requests / min globally, with standard rate-limit headers.
-- **Strong password policy** — enforced at signup and password change, with a 22-entry weak-password blocklist.
-- **Financial balance protection** — members cannot leave a group until their net balance is exactly ₹0.00.
-- **Immutable financial history** — expenses are soft-voided (never deleted), edits are versioned, and every settlement transition is logged.
-- **Safe error handling** — unexpected server errors return a generic message; details are logged on the server.
+- **Parameterized SQL only** — no ORM, no string interpolation.
+- **ACID transactions** — every multi-table write runs in `BEGIN … COMMIT` with automatic `ROLLBACK`.
+- **Row-level locking** — `SELECT … FOR UPDATE` makes settlement transitions race-proof.
+- **Idempotency** — per-user, per-route keys with request-hash verification (see Feature 5).
+- **Authentication & authorization** — JWT bearer tokens, bcrypt hashing, and `requireGroupMember` / `requireGroupAdmin` checks on group-scoped routes; the server will not boot without a 32+ character `JWT_SECRET`.
+- **HTTP hardening** — `helmet` security headers; CORS restricted to an explicit allow-list (wildcard rejected at startup).
+- **Request guards** — 100 KB JSON body limit; request bodies must be JSON objects; null bytes anywhere in the body are rejected; malformed input returns clean 4xx errors.
+- **Rate limiting** — 50 requests / 15 min on signup & login, 300 requests / min globally.
+- **Privacy** — user search and UPI lookup are limited to people who share an active group with you.
+- **Financial protection** — settlements are capped at the real net debt; members can't leave with an unsettled balance or in-flight settlements.
+- **Immutable financial history** — soft-voided expenses, versioned edits, and a logged settlement status history.
+- **Safe error handling** — unexpected server errors return a generic message (even in development); details stay in server logs.
+- **Transport security** — production database connections use SSL with certificate verification.
+- **Dependency hygiene** — `npm audit` reported 0 vulnerabilities for backend and frontend at the last review.
 
 ---
 
@@ -358,12 +375,15 @@ SettleUpExpenses/
 - [`docs/API_DOCUMENTATION.md`](docs/API_DOCUMENTATION.md) — REST endpoint reference
 - [`docs/DATABASE_SCHEMA.md`](docs/DATABASE_SCHEMA.md) — schema, constraints, indexes, ERD
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — production deployment guide
+- [`CHANGELOG_REVIEW.md`](CHANGELOG_REVIEW.md) — security/correctness review findings and the tests covering each fix
 
 ---
 
 ## 🔮 Future Improvements
 
-- Surface the **Shares** and **Adjustment** split methods in the expense form (the API, schema, and engines already support them).
-- Optional dark theme and richer responsive breakpoints for the design system.
-- Component-level frontend tests (currently only utility helpers are covered).
-- Real payment-rail integration (UPI Autopay / collect requests) in addition to deep links and QR codes.
+- Surface the **Shares** and **Adjustment** split methods in the expense form (API, schema, and engines already support them).
+- Implement a real **password-reset flow** (the current dialog is a placeholder).
+- Component-level frontend tests (currently only utility helpers have unit tests, plus Playwright E2E).
+- Optional dark theme and richer responsive breakpoints.
+- Real payment-rail integration (UPI Autopay / collect requests) beyond deep links and QR codes.
+- A paid Render tier or an uptime ping to avoid cold starts on the live demo.
