@@ -17,7 +17,7 @@ It computes exactly **who owes whom**, maintains a **zero-sum net balance invari
 | Tier | Platform | URL / Notes |
 |---|---|---|
 | **Frontend** | [Vercel](https://settleupexpense.onrender.com) | **https://settle-up-expense.vercel.app/** |
-| **Backend API** | [Render](https://render.com) (Web Service) | `https://YOUR-RENDER-SERVICE.onrender.com` |
+| **Backend API** | [Render](https://render.com) (Web Service) | `https://settleupexpense.onrender.com` |
 | **Database** | [Neon](https://neon.tech) (serverless PostgreSQL) | Connected via `DB_*` environment variables, SSL enabled in production |
 
 > **Free-tier note:** the live demo runs on free/trial plans. The Render service may go to sleep when idle, so the **first request after inactivity can take several seconds** while it wakes up. Neon's free compute can also suspend when idle and resume on the next query.
@@ -232,14 +232,14 @@ CORS_ORIGINS=https://settle-up-expense.vercel.app
 
 Environment variable:
 ```env
-VITE_API_URL=https://YOUR-RENDER-SERVICE.onrender.com/api
+VITE_API_URL=https://settleupexpense.onrender.com/api
 ```
 - `VITE_API_URL` is baked in at **build time** — redeploy the frontend after changing it.
 - [`frontend/vercel.json`](frontend/vercel.json) rewrites all paths to `index.html` so client-side routes (`/dashboard`, `/groups/:id`) survive a page refresh.
 
 ### Post-deploy checklist
-- [ ] `https://YOUR-RENDER-SERVICE.onrender.com/api/health` returns `{ "status": "healthy" }`
-- [ ] `https://YOUR-RENDER-SERVICE.onrender.com/api/db-test` confirms the Neon connection
+- [ ] `https://settleupexpense.onrender.com/api/health` returns `{ "status": "healthy" }`
+- [ ] `https://settleupexpense.onrender.com/api/db-test` confirms the Neon connection
 - [ ] Sign up and log in on https://settle-up-expense.vercel.app/
 - [ ] Create a group, add an expense, and run a settlement end to end
 
